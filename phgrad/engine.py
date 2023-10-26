@@ -1,7 +1,8 @@
 import math
 import operator
 import random
-from typing import Any
+from typing import Any, Tuple
+
 
 def autoconvert(func):
     def wrapper(*args, **kwargs):
@@ -12,18 +13,17 @@ def autoconvert(func):
             other = Scalar(other)
         args = (args[0], other, *args[2:])
         return func(*args, **kwargs)
+
     return wrapper
 
 
 class Scalar:
-
     def __init__(self, value, children=(), op=None):
         self.value = value
         self.grad = 0
         self._children = children
         self._backward = lambda: None
         self.op = op
-
 
     @autoconvert
     def __add__(self, other: "Scalar"):
@@ -37,7 +37,7 @@ class Scalar:
         new._backward = _backward
 
         return new
-    
+
     @autoconvert
     def __mul__(self, other: "Scalar"):
         new_value = operator.mul(self.value, other.value)
@@ -51,50 +51,50 @@ class Scalar:
 
         return new
 
-    @autoconvert 
+    @autoconvert
     def __radd__(self, other: "Scalar"):
         return self + other
-    
-    @autoconvert 
+
+    @autoconvert
     def __pow__(self, other: "Scalar"):
         new_value = operator.pow(self.value, other.value)
         new = Scalar(new_value, children=(self, other), op=operator.pow)
 
         def _backward():
-            self.grad += (other.value * self.value**(other.value-1)) * new.grad
+            self.grad += (other.value * self.value ** (other.value - 1)) * new.grad
 
         new._backward = _backward
 
         return new
-    
+
     @autoconvert
     def __rpow__(self, other: "Scalar"):
-        return other ** self
+        return other**self
 
-    @autoconvert 
+    @autoconvert
     def __rmul__(self, other: "Scalar"):
         return self * other
-    
+
     @autoconvert
     def __sub__(self, other: "Scalar"):
         return self + (-other)
-    
+
     @autoconvert
     def __rsub__(self, other: "Scalar"):
         return other + (-self)
-    
+
     @autoconvert
     def __neg__(self):
         return self * -1
-    
+
     @autoconvert
     def __truediv__(self, other: "Scalar"):
-        return self * (other ** -1)
-    
+        return self * (other**-1)
+
     @autoconvert
     def __rtruediv__(self, other: "Scalar"):
-        return other * (self ** -1)
-    
+        return other * (self**-1)
+
     def backward(self):
         self.grad = 1
         topo = []
@@ -111,10 +111,12 @@ class Scalar:
 
         for v in reversed(topo):
             v._backward()
-    
+
     def __str__(self) -> str:
         return f"Scalar({self.value}, grad={self.grad})"
-    
+
+    def __repr__(self) -> str:
+        return self.__str__()
 
     def relu(self):
         new_value = max(self.value, 0)
@@ -127,34 +129,153 @@ class Scalar:
 
         return new
 
-def softmax_scalars(inputs):
-    exp_values = [pow(2.718281828459045, scalar.value) for scalar in inputs]
-    total = sum(exp_values)
-    softmax_outputs = [val / total for val in exp_values]
-    results = []
 
-    for idx, softmax_output in enumerate(softmax_outputs):
-        scalar = Scalar(softmax_output)
+class Pensor:
+    """Pensor is for now only a collection of scalar values and does not behave like a tensor.
+    So every operation is done element-wise.
+    """
 
-        def create_backward(idx):
-            def backward():
-                s = softmax_outputs[idx]
-                for j, inp in enumerate(inputs):
-                    if idx == j:
-                        grad_val = s * (1 - s)
-                    else:
-                        grad_val = -s * softmax_outputs[j]
-                    inp.grad += grad_val * scalar.grad
-            return backward
+    def __init__(self, values):
+        self.values = []
+        _current_dim_len = None
+        for value in values:
+            if isinstance(value, list):
+                if _current_dim_len is None:
+                    _current_dim_len = len(value)
+                else:
+                    assert _current_dim_len == len(value), "All dimensions must be of same length"
 
-        scalar._backward = create_backward(idx)
-        results.append(scalar)
+                self.values.append([self._value_to_scalar(val) for val in value])
+            else:
+                self.values.append(self._value_to_scalar(value))
 
-    return results
+    def __getitem__(self, idx):
+        # NOTE: Here we are getting into the problem of returning a view or a copy
+        return self.values[idx]
+
+    def __setitem__(self, idx, value):
+        self.values[idx] = self._value_to_scalar(value)
+
+    def __str__(self) -> str:
+        return f"Pensor({self.values})"
+
+    def __repr__(self) -> str:
+        return self.__str__()
+
+    def __len__(self):
+        return len(self.values)
+
+    def __iter__(self):
+        return iter(self.values)
+
+    def __add__(self, other):
+        return self._elementwise(other, operator.add)
+
+    def __radd__(self, other):
+        return self._elementwise(other, operator.add)
+
+    def __sub__(self, other):
+        return self._elementwise(other, operator.sub)
+
+    def __rsub__(self, other):
+        return self._elementwise(other, operator.sub)
+
+    def __mul__(self, other):
+        return self._elementwise(other, operator.mul)
+
+    def __rmul__(self, other):
+        return self._elementwise(other, operator.mul)
+
+    def __truediv__(self, other):
+        return self._elementwise(other, operator.truediv)
+
+    def __rtruediv__(self, other):
+        return self._elementwise(other, operator.truediv)
+
+    def __pow__(self, other):
+        return self._elementwise(other, operator.pow)
+
+    def __rpow__(self, other):
+        return self._elementwise(other, operator.pow)
+
+    @property
+    def shape(self):
+        # TODO: For now only 1D and 2D pensors are supported
+        dims = []
+        if isinstance(self.values[0], list):
+            dims.append(len(self))
+            dims.append(len(self.values[0]))
+        else:
+            dims.append(len(self))
+        return tuple(dims)
+
+    def _elementwise(self, other, op):
+        if isinstance(other, Pensor):
+            assert len(self) == len(other)
+            return Pensor(
+                [op(self.values[i], other.values[i]) for i in range(len(self))]
+            )
+        return Pensor([op(self.values[i], other) for i in range(len(self))])
+        
+    def relu(self):
+        return Pensor([val.relu() for val in self.values])
+
+    @staticmethod
+    def _value_to_scalar(value):
+        if isinstance(value, Scalar):
+            return value
+        else:
+            return Scalar(value)
+    
+    @classmethod
+    def ones(cls, dims: Tuple):
+        """Create a pensors of ones."""
+        assert len(dims) <= 2, "Only 1D and 2D pensors are supported"
+        if len(dims) == 1:
+            return cls([1 for _ in range(dims[0])])
+        else:
+            return cls([[1 for _ in range(dims[1])] for _ in range(dims[0])])
+        
+    @classmethod
+    def zeros(cls, dims: Tuple):
+        """Create a pensors of zeros."""
+        assert len(dims) <= 2, "Only 1D and 2D pensors are supported"
+        if len(dims) == 1:
+            return cls([0 for _ in range(dims[0])])
+        else:
+            return cls([[0 for _ in range(dims[1])] for _ in range(dims[0])])
+        
+    @classmethod
+    def randn(cls, dims: Tuple):
+        """Create a pensors of random values from a normal distribution."""
+        assert len(dims) <= 2, "Only 1D and 2D pensors are supported"
+        if len(dims) == 1:
+            return cls([random.gauss(0, 1) for _ in range(dims[0])])
+        else:
+            return cls([[random.gauss(0, 1) for _ in range(dims[1])] for _ in range(dims[0])])
+    
+    @classmethod
+    def rand(cls, dims: Tuple):
+        """Create a pensors of random values from a uniform distribution."""
+        assert len(dims) <= 2, "Only 1D and 2D pensors are supported"
+        if len(dims) == 1:
+            return cls([random.uniform(0, 1) for _ in range(dims[0])])
+        else:
+            return cls([[random.uniform(0, 1) for _ in range(dims[1])] for _ in range(dims[0])])
+        
+    @classmethod
+    def arange(cls, start: int, end: int, step: int = 1):
+        """Create a pensors of values from start to end with a step."""
+        return cls([i for i in range(start, end, step)])
+    
+    @classmethod
+    def eye(cls, n: int):
+        """Create a pensors of identity matrix."""
+        return cls([[1 if i == j else 0 for i in range(n)] for j in range(n)])
+
 
 
 class Module:
-    
     def __init__(self):
         self._parameters = {}
 
@@ -166,48 +287,29 @@ class Module:
         for param in self.parameters():
             param.grad = 0
 
-class Neuron(Module):
-
-    def __init__(self, inp_dim: int):
-        super().__init__()
-        self.weights = [Scalar(random.uniform(-1, 1)) for _ in range(inp_dim)]
-        self.bias = Scalar(0)
-
-    def __call__(self, input):
-        return sum(w * i for w, i in zip(self.weights, input)) + self.bias
-
-
 
 class Linear(Module):
-
-    def __init__(self, inp_dim: int, out_dim: int):
+    def __init__(self, inp_dim: int, output_dim: int):
         super().__init__()
-        self.neurons = [Neuron(inp_dim) for _ in range(out_dim)]
+        self.weights = [
+            [Scalar(random.uniform(-1, 1)) for _ in range(inp_dim)]
+            for _ in range(output_dim)
+        ]
+        self.biases = [Scalar(0) for _ in range(output_dim)]
 
     def __call__(self, input):
-        return [n(input) for n in self.neurons]
+        return self._forward(input)
 
-    def backward(self):
-        pass
+    def _forward(self, input):
+        output = [Scalar(0) for _ in range(len(self.weights))]
+        for i, weight in enumerate(self.weights):
+            for j, inp in enumerate(input):
+                output[i] += weight[j] * inp
+            output[i] += self.biases[i]
+        return output
 
-class MLP(Module):
-
-    def __init__(self, inp_dim: int, hid_dim: int, out_dim: int):
-        super().__init__()
-        self.linear1 = Linear(inp_dim, hid_dim)
-        self.linear2 = Linear(hid_dim, out_dim)
-
-    def __call__(self, input):
-        x = self.linear1(input)
-        for x_i in x:
-            x_i = x_i.relu()
-        return self.linear2(x)
-
-    def backward(self):
-        pass
 
 class MNISTClassifier(Module):
-
     def __init__(self, inp_dim: int, out_dim: int, hidden: int):
         super().__init__()
         self.linear1 = Linear(inp_dim, hidden)
