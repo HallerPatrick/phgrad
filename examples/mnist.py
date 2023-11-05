@@ -6,7 +6,7 @@ from phgrad.nn import Linear
 from phgrad.fun import argmax
 from phgrad.loss import nllloss
 from phgrad.optim import SGD
-from viz_graph import draw_dot
+from examples.viz_graph import draw_dot
 
 from tqdm import tqdm
 
@@ -123,7 +123,6 @@ for step, (sample, target) in pbar:
         pbar.set_description(f"Loss: {loss.data.item():5.2f}, Accuracy: {accuracy:.2f}")
     else:
         pbar.set_description(f"Loss: {loss.data[0]:5.2f}, Accuracy: {accuracy:.2f}")
-    # break
 
 accuracy = total_correct / total_samples  # calculate overall accuracy
 print(f"Final accuracy: {accuracy}")
