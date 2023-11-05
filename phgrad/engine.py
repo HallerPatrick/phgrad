@@ -1,322 +1,125 @@
-import math
-import operator
-import random
-from typing import Any, Tuple
+from typing import Any, Tuple, Union, List, Optional
 
+import numpy as np
+import numpy.typing as npt
 
-def autoconvert(func):
-    def wrapper(*args, **kwargs):
-        if len(args) < 2:
-            return func(*args, **kwargs)
-        other = args[1]
-        if not isinstance(other, Scalar):
-            other = Scalar(other)
-        args = (args[0], other, *args[2:])
-        return func(*args, **kwargs)
+class PensorTensor:
+    def __init__(self, value: npt.NDArray, requires_grad=True):
+        if type(value) in [np.float64, np.float32, np.float16, np.float128, np.int64]:
+            value = np.array(value)
 
-    return wrapper
+        assert isinstance(
+            value, np.ndarray
+        ), f"Value must be a numpy array, got {type(value)}"
 
+        self.data: npt.NDArray = value
+        self.grad: Optional[npt.NDArray] = None
+        self.requires_grad: bool = requires_grad
 
-class Scalar:
-    def __init__(self, value, children=(), op=None):
-        self.value = value
-        self.grad = 0
-        self._children = children
-        self._backward = lambda: None
-        self.op = op
+        # Context contains the information needed to compute the gradient
+        # It contains the operation that created this tensor and the tensors
+        self.ctx = None
 
-    @autoconvert
-    def __add__(self, other: "Scalar"):
-        new_value = operator.add(self.value, other.value)
-        new = Scalar(new_value, children=(self, other), op=operator.add)
-
-        def _backward():
-            self.grad = self.grad + new.grad
-            other.grad = other.grad + new.grad
-
-        new._backward = _backward
-
-        return new
-
-    @autoconvert
-    def __mul__(self, other: "Scalar"):
-        new_value = operator.mul(self.value, other.value)
-        new = Scalar(new_value, children=(self, other), op=operator.mul)
-
-        def _backward():
-            self.grad = self.grad + new.grad * other.value
-            other.grad = other.grad + new.grad * self.value
-
-        new._backward = _backward
-
-        return new
-
-    @autoconvert
-    def __radd__(self, other: "Scalar"):
-        return self + other
-
-    @autoconvert
-    def __pow__(self, other: "Scalar"):
-        new_value = operator.pow(self.value, other.value)
-        new = Scalar(new_value, children=(self, other), op=operator.pow)
-
-        def _backward():
-            self.grad += (other.value * self.value ** (other.value - 1)) * new.grad
-
-        new._backward = _backward
-
-        return new
-
-    @autoconvert
-    def __rpow__(self, other: "Scalar"):
-        return other**self
-
-    @autoconvert
-    def __rmul__(self, other: "Scalar"):
-        return self * other
-
-    @autoconvert
-    def __sub__(self, other: "Scalar"):
-        return self + (-other)
-
-    @autoconvert
-    def __rsub__(self, other: "Scalar"):
-        return other + (-self)
-
-    @autoconvert
-    def __neg__(self):
-        return self * -1
-
-    @autoconvert
-    def __truediv__(self, other: "Scalar"):
-        return self * (other**-1)
-
-    @autoconvert
-    def __rtruediv__(self, other: "Scalar"):
-        return other * (self**-1)
-
-    def backward(self):
-        self.grad = 1
-        topo = []
-        visited = set()
-
-        def build_topo(v):
-            if v not in visited:
-                visited.add(v)
-                for child in v._children:
-                    build_topo(child)
-                topo.append(v)
-
-        build_topo(self)
-
-        for v in reversed(topo):
-            v._backward()
-
-    def __str__(self) -> str:
-        return f"Scalar({self.value}, grad={self.grad})"
-
-    def __repr__(self) -> str:
-        return self.__str__()
-
-    def relu(self):
-        new_value = max(self.value, 0)
-        new = Scalar(new_value, children=(self,), op=max)
-
-        def _backward():
-            self.grad = self.grad + new.grad * (self.value > 0)
-
-        new._backward = _backward
-
-        return new
-
-
-class Pensor:
-    """Pensor is for now only a collection of scalar values and does not behave like a tensor.
-    So every operation is done element-wise.
-    """
-
-    def __init__(self, values):
-        self.values = []
-        _current_dim_len = None
-        for value in values:
-            if isinstance(value, list):
-                if _current_dim_len is None:
-                    _current_dim_len = len(value)
-                else:
-                    assert _current_dim_len == len(value), "All dimensions must be of same length"
-
-                self.values.append([self._value_to_scalar(val) for val in value])
-            else:
-                self.values.append(self._value_to_scalar(value))
-
-    def __getitem__(self, idx):
-        # NOTE: Here we are getting into the problem of returning a view or a copy
-        return self.values[idx]
+    def __getitem__(self, idx) -> "PensorTensor":
+        return PensorTensor(self.data[idx])
 
     def __setitem__(self, idx, value):
-        self.values[idx] = self._value_to_scalar(value)
-
-    def __str__(self) -> str:
-        return f"Pensor({self.values})"
-
-    def __repr__(self) -> str:
-        return self.__str__()
-
-    def __len__(self):
-        return len(self.values)
-
-    def __iter__(self):
-        return iter(self.values)
-
-    def __add__(self, other):
-        return self._elementwise(other, operator.add)
-
-    def __radd__(self, other):
-        return self._elementwise(other, operator.add)
-
-    def __sub__(self, other):
-        return self._elementwise(other, operator.sub)
-
-    def __rsub__(self, other):
-        return self._elementwise(other, operator.sub)
-
-    def __mul__(self, other):
-        return self._elementwise(other, operator.mul)
-
-    def __rmul__(self, other):
-        return self._elementwise(other, operator.mul)
-
-    def __truediv__(self, other):
-        return self._elementwise(other, operator.truediv)
-
-    def __rtruediv__(self, other):
-        return self._elementwise(other, operator.truediv)
-
-    def __pow__(self, other):
-        return self._elementwise(other, operator.pow)
-
-    def __rpow__(self, other):
-        return self._elementwise(other, operator.pow)
+        self.data[idx] = value
 
     @property
     def shape(self):
-        # TODO: For now only 1D and 2D pensors are supported
-        dims = []
-        if isinstance(self.values[0], list):
-            dims.append(len(self))
-            dims.append(len(self.values[0]))
-        else:
-            dims.append(len(self))
-        return tuple(dims)
+        """Return the shape of the tensor."""
+        return self.data.shape
 
-    def _elementwise(self, other, op):
-        if isinstance(other, Pensor):
-            assert len(self) == len(other)
-            return Pensor(
-                [op(self.values[i], other.values[i]) for i in range(len(self))]
+    @property
+    def dtype(self):
+        """Return the dtype of the tensor."""
+        return self.data.dtype
+    
+    def deepwalk(self):
+        def _deepwalk(node, visited, nodes):
+            visited.add(node)
+            if node.ctx:
+                [_deepwalk(i, visited, nodes) for i in node.ctx.prev if i not in visited]
+                nodes.append(node)
+            return nodes
+        return _deepwalk(self, set(), [])
+
+    def backward(self, allow_fill=True):
+        """Compute the gradient of this tensor.
+
+        Args:
+            allow_fill (bool, optional): Whether to fill the gradient with one if it is None. Defaults to True.
+            This is needed for implicit gradient creation.
+        """
+        if self.ctx is None:
+            return
+
+        if self.grad is None and allow_fill:
+            assert (
+                self.data.size == 1
+            ), f"Only tensors with size 1 can have None gradient, Tensor has size {self.data.size}"
+            self.grad = np.ones_like(self.data)
+
+        assert self.grad is not None
+
+        grads = self.ctx.backward(self.ctx, self.grad)
+
+        if len(self.ctx.prev) == 1 or isinstance(grads, np.ndarray):
+            grads = [grads]
+
+
+        # Iterate over all previous tensors and set the gradient
+        # print("=== All Backward pass === ")
+        # for t, g in zip(self.ctx.prev, grads):
+        #     print(f"Shapes: input {t.shape}, grad {g.shape}, op={self.ctx}")
+        #     # print("Values:", t, g)
+        #     print("=======")
+
+        for t, g in zip(self.ctx.prev, grads):
+            if g is None:
+                continue
+                
+            assert (
+                g.shape == t.data.shape
+            ), "Grad shape must match tensor shape, {} != {} ({})".format(
+                g.shape, t.data.shape, self.ctx
             )
-        return Pensor([op(self.values[i], other) for i in range(len(self))])
-        
-    def relu(self):
-        return Pensor([val.relu() for val in self.values])
+            t.grad = g
+            t.backward(False)
 
-    @staticmethod
-    def _value_to_scalar(value):
-        if isinstance(value, Scalar):
-            return value
-        else:
-            return Scalar(value)
+    @property
+    def T(self):
+        """Return the transpose of the tensor."""
+        return self.transpose((1, 0))
+
+    def __str__(self) -> str:
+        return f"PensorTensor({self.data}, grad={self.grad})"
+
+    def __repr__(self) -> str:
+        return self.__str__()
+
+    def __add__(self, other):
+        return self.add(other)
+
+    def __radd__(self, other):
+        return self.add(other)
+
+    def __sub__(self, other):
+        return self.sub(other)
+
+    def __rsub__(self, other):
+        return self.sub(other)
+
+    def __mul__(self, other):
+        return self.mul(other)
+
+    def __rmul__(self, other):
+        return self.mul(other)
     
-    @classmethod
-    def ones(cls, dims: Tuple):
-        """Create a pensors of ones."""
-        assert len(dims) <= 2, "Only 1D and 2D pensors are supported"
-        if len(dims) == 1:
-            return cls([1 for _ in range(dims[0])])
-        else:
-            return cls([[1 for _ in range(dims[1])] for _ in range(dims[0])])
-        
-    @classmethod
-    def zeros(cls, dims: Tuple):
-        """Create a pensors of zeros."""
-        assert len(dims) <= 2, "Only 1D and 2D pensors are supported"
-        if len(dims) == 1:
-            return cls([0 for _ in range(dims[0])])
-        else:
-            return cls([[0 for _ in range(dims[1])] for _ in range(dims[0])])
-        
-    @classmethod
-    def randn(cls, dims: Tuple):
-        """Create a pensors of random values from a normal distribution."""
-        assert len(dims) <= 2, "Only 1D and 2D pensors are supported"
-        if len(dims) == 1:
-            return cls([random.gauss(0, 1) for _ in range(dims[0])])
-        else:
-            return cls([[random.gauss(0, 1) for _ in range(dims[1])] for _ in range(dims[0])])
-    
-    @classmethod
-    def rand(cls, dims: Tuple):
-        """Create a pensors of random values from a uniform distribution."""
-        assert len(dims) <= 2, "Only 1D and 2D pensors are supported"
-        if len(dims) == 1:
-            return cls([random.uniform(0, 1) for _ in range(dims[0])])
-        else:
-            return cls([[random.uniform(0, 1) for _ in range(dims[1])] for _ in range(dims[0])])
-        
-    @classmethod
-    def arange(cls, start: int, end: int, step: int = 1):
-        """Create a pensors of values from start to end with a step."""
-        return cls([i for i in range(start, end, step)])
-    
-    @classmethod
-    def eye(cls, n: int):
-        """Create a pensors of identity matrix."""
-        return cls([[1 if i == j else 0 for i in range(n)] for j in range(n)])
+    # neg
+    def __neg__(self):
+        return self.neg()
 
-
-
-class Module:
-    def __init__(self):
-        self._parameters = {}
-
-    def parameters(self):
-        for name, param in self._parameters.items():
-            yield param
-
-    def zero_grad(self):
-        for param in self.parameters():
-            param.grad = 0
-
-
-class Linear(Module):
-    def __init__(self, inp_dim: int, output_dim: int):
-        super().__init__()
-        self.weights = [
-            [Scalar(random.uniform(-1, 1)) for _ in range(inp_dim)]
-            for _ in range(output_dim)
-        ]
-        self.biases = [Scalar(0) for _ in range(output_dim)]
-
-    def __call__(self, input):
-        return self._forward(input)
-
-    def _forward(self, input):
-        output = [Scalar(0) for _ in range(len(self.weights))]
-        for i, weight in enumerate(self.weights):
-            for j, inp in enumerate(input):
-                output[i] += weight[j] * inp
-            output[i] += self.biases[i]
-        return output
-
-
-class MNISTClassifier(Module):
-    def __init__(self, inp_dim: int, out_dim: int, hidden: int):
-        super().__init__()
-        self.linear1 = Linear(inp_dim, hidden)
-        self.linear2 = Linear(hidden, out_dim)
-
-    def __call__(self, x) -> Any:
-        x = self.linear1(x)
-        for x_i in x:
-            x_i = x_i.relu()
-        return self.linear2(x)
+# We do it like Georg Hotz and build the tensors ops and at them dinamically
+from . import ops

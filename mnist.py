@@ -1,9 +1,15 @@
 import requests, gzip, os, hashlib
 import numpy as np
 
-from phgrad.engine import Linear, softmax_scalars
+from phgrad.engine import PensorTensor
+from phgrad.nn import Linear 
 from phgrad.fun import argmax
 from phgrad.loss import nllloss
+from phgrad.optim import SGD
+from viz_graph import draw_dot
+
+from tqdm import tqdm
+
 
 def fetch(url):
     fp = os.path.join("/tmp", hashlib.md5(url.encode("utf-8")).hexdigest())
@@ -33,28 +39,91 @@ X_test = X_test.reshape(-1, 28 * 28) / 255.0
 Y_train = np.eye(10)[Y_train.reshape(-1)]
 Y_test = np.eye(10)[Y_test.reshape(-1)]
 
+
 class Classifier:
-
     def __init__(self) -> None:
-        self.l1 = Linear(784, 128)
-        self.l2 = Linear(128, 10)
+        self.l1 = Linear(784, 64, bias=False)
+        self.l2 = Linear(64, 10, bias=False)
 
-    def __call__(self, x):
-        # x: (1, 28, 28)
+    def __call__(self, x: PensorTensor):
         x = self.l1(x)
-        for x_i in x:
-            x_i.relu()
+        x = x.relu()
         x = self.l2(x)
-        x = softmax_scalars(x)
-        return x 
+        return x.log_softmax()
     
-classifier = Classifier()
+    def parameters(self):
+        yield from self.l1.parameters()
+        yield from self.l2.parameters()
 
-for sample, target in zip(X_train, Y_train):
-    result = classifier(sample)
-    pred, pred_idx = argmax(result)
-    target = target.tolist()
-    target = list(map(int, target))
-    loss = nllloss(result, target)
-    print(loss)
-    exit()
+import torch
+
+class TorchClassifier(torch.nn.Module):
+
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        self.l1 = torch.nn.Linear(784, 64, bias=False)
+        self.l2 = torch.nn.Linear(64, 10, bias=False)
+
+    def forward(self, x):
+        x = self.l1(x)
+        x = torch.relu(x)
+        x = self.l2(x)
+        return torch.nn.functional.log_softmax(x, dim=1)
+
+max_steps = 60000
+
+classifier = Classifier()
+torch_classifier = TorchClassifier()
+
+optimizer = SGD(list(classifier.parameters()), lr=0.01)
+torch_optimizer = torch.optim.SGD(torch_classifier.parameters(), lr=0.01)
+
+total_correct = 0  # initialize total number of correct predictions
+total_samples = 0
+
+TORCH = True
+
+pbar = tqdm(enumerate(zip(X_train, Y_train)), total=max_steps)
+for step, (sample, target) in pbar:
+
+    if TORCH:
+        torch_classifier.zero_grad()
+
+        torch_result = torch_classifier(torch.tensor(sample, dtype=torch.float32).unsqueeze(0))
+        loss = torch.nn.functional.nll_loss(torch_result, torch.tensor([np.argmax(target)]))
+
+        pred_idx = argmax(torch_result, dim=1)
+        target_idx = np.argmax(target, axis=0)
+        total_correct += int(pred_idx == target_idx)
+        loss.backward()
+        torch_optimizer.step()
+
+    else:
+        optimizer.zero_grad()
+
+        sample = PensorTensor(np.expand_dims(sample, 0))
+        result = classifier(sample)
+        logits = result.softmax()
+        pred_idx = argmax(logits, dim=1)
+        target = target.tolist()
+        target = list(map(int, target))
+        target_idx = np.argmax(target, axis=0)
+        loss = nllloss(result, PensorTensor(np.array([[target_idx]]), requires_grad=False))
+        loss.backward()
+        optimizer.step()
+        total_correct += int(pred_idx == target_idx)
+
+    total_samples += 1
+
+    if step == max_steps:
+        break
+
+    accuracy = total_correct / total_samples  # calculate overall accuracy
+    if TORCH:
+        pbar.set_description(f"Loss: {loss.data.item():5.2f}, Accuracy: {accuracy:.2f}")
+    else:
+        pbar.set_description(f"Loss: {loss.data[0]:5.2f}, Accuracy: {accuracy:.2f}")
+    # break
+
+accuracy = total_correct / total_samples  # calculate overall accuracy
+print(f"Final accuracy: {accuracy}")

@@ -1,8 +1,10 @@
 from typing import List
 
-from .engine import Scalar
+import numpy as np
 
-def nllloss(inputs: List[Scalar], target: int, reduce="mean"):
+from .engine import PensorTensor
+
+def nllloss(inputs: PensorTensor, targets: PensorTensor, reduce="mean"):
     """Negative log likelihood loss.
 
     Args:
@@ -12,11 +14,36 @@ def nllloss(inputs: List[Scalar], target: int, reduce="mean"):
     Returns:
         Scalar value of the loss.
     """
-    assert reduce in ["mean", "sum"]
-    assert target < len(inputs)
+    assert reduce in ["mean", "sum"], "Invalid reduce"
+    
+    # TODO
+    # If targets are not one-hot encoded, convert them to one-hot.
+    # if len(np.squeeze(targets.data).shape) == 1:
+    #     print("One hot encoding")
+    #     targets = np.zeros((targets.shape[0], inputs.shape[1]))
+    #     targets[np.arange(targets.shape[0]), targets] = 1
 
-    loss = -inputs[target].value
+    loss = inputs.take(targets, dim=1).neg()
+
     if reduce == "mean":
-        loss /= len(inputs)
+        loss = loss.mean()
 
-    return Scalar(loss)
+    if reduce == "sum":
+        loss = loss.sum()
+
+    return loss
+
+
+def cross_entropy(inputs: PensorTensor, target: int):
+    """Cross entropy loss.
+
+    Args:
+        input: List of Scalar values (raw logits).
+        target: Indice of the target class.
+
+    Returns:
+        Scalar value of the loss.
+    """
+    # assert target < inputs.shape[1], "Invalid target"
+    log_logits = inputs.log_softmax()
+    return nllloss(log_logits, target)
