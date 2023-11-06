@@ -1,34 +1,48 @@
-from functools import partialmethod
+"""Define the operations that can be applied to tensors.
+
+Our current CPU implementation is based on numpy, which already provides
+a lot of operations. However, we need to define the gradient of these
+operations. This is done in this module.
+
+We define a class for each operation, which inherits from the Function
+class. This class defines the forward and backward pass of the operation.
+The forward pass is called when the operation is applied to a tensor.
+The backward pass is called when the gradient is computed.
+
+All functions operate with numpy arrays. Therefore all function signatures
+and return types are defined as numpy arrays. We wrap the function calls 
+in a Tensor object, which also stores the gradient and the operation that
+created the tensor.
+
+For typing we generate a stub file on the fly, which is used by the type
+checker to check the types of the functions. The stub files then contain
+the signature with the tensor type instead of the numpy array type.
+"""
+
 from typing import List, Tuple
 
 import numpy.typing as npt
 import numpy as np
 
 from .engine import Tensor
+from .utils import register
 
 class Function:
     def __init__(self, *tensors: Tuple[npt.NDArray]) -> None:
-        self.prev: Tuple[npt.NDArray] = tensors
+        self.prev = tensors
         self._precomputed_tensors: List[Tuple[npt.NDArray]] = []
-
-    @staticmethod
-    def forward(ctx, *args, **kwargs):
-        raise NotImplementedError
-
-    @staticmethod
-    def backward(ctx, grad_output: npt.NDArray):
-        raise NotImplementedError
 
     def save_precomputed_tensors(self, *tensors: Tuple[npt.NDArray]) -> None:
         return self._precomputed_tensors.extend(tensors)
 
     def apply(self, arg, *x, **kwargs):
         # support the args in both orders
+
         if isinstance(arg, Tensor):
-            op: "Function" = self
+            op_function: "Function" = self
             x = [arg] + list(x)
         else:
-            op: "Function" = arg
+            op_function: "Function" = arg
             x = [self] + list(x)
         tt = x[0]
 
@@ -45,8 +59,8 @@ class Function:
                 converted_x.append(
                     Tensor(np.array([arg], dtype=tt.dtype), requires_grad=False)
                 )
-        ctx = op(*converted_x)
-        ret = Tensor(op.forward(ctx, *[t.data for t in converted_x], **kwargs))
+        ctx = op_function(*converted_x)
+        ret = Tensor(op_function.forward(ctx, *[t.data for t in converted_x], **kwargs))
         if ret.requires_grad:
             ret.ctx = ctx
         return ret
@@ -102,17 +116,15 @@ class Add(Function):
     """
 
     @staticmethod
-    def forward(ctx, *args, **_):
+    def forward(ctx, self: np.ndarray, tensor: np.ndarray) -> np.ndarray:
         """Addition of two tensors."""
-        ctx.save_precomputed_tensors(*args)
-        return args[0] + args[1]
+        ctx.save_precomputed_tensors(self, tensor)
+        return self + tensor
 
     @staticmethod
     def backward(ctx, grad_output: npt.NDArray):
         x, y = ctx._precomputed_tensors
         return unbroadcast(grad_output, x.shape), unbroadcast(grad_output, y.shape)
-
-
 
 
 class Mul(Function):
@@ -125,10 +137,10 @@ class Mul(Function):
     """
 
     @staticmethod
-    def forward(ctx, *args, **_):
+    def forward(ctx, self: np.ndarray, tensor: np.ndarray) -> np.ndarray:
         """Multiplication of two tensors."""
-        ctx.save_precomputed_tensors(*args)
-        return args[0] * args[1]
+        ctx.save_precomputed_tensors(self, tensor)
+        return self * tensor
 
     @staticmethod
     def backward(ctx, grad_output: npt.NDArray):
@@ -146,10 +158,10 @@ class Sub(Function):
     """
 
     @staticmethod
-    def forward(ctx, *args, **_):
+    def forward(ctx, self: np.ndarray, tensor: np.ndarray) -> np.ndarray:
         """Subtraction of two tensors."""
-        ctx.save_precomputed_tensors(*args)
-        return args[0] - args[1]
+        ctx.save_precomputed_tensors(self, tensor)
+        return self - tensor
 
     @staticmethod
     def backward(ctx, grad_output: npt.NDArray):
@@ -166,10 +178,10 @@ class Div(Function):
     """
 
     @staticmethod
-    def forward(ctx, *args, **_):
+    def forward(ctx, self: np.ndarray, tensor: np.ndarray) -> np.ndarray:
         """Division of two tensors."""
-        ctx.save_precomputed_tensors(*args)
-        return args[0] / args[1]
+        ctx.save_precomputed_tensors(self, tensor)
+        return self / tensor
 
     @staticmethod
     def backward(ctx, grad_output: npt.NDArray):
@@ -200,9 +212,9 @@ class Div(Function):
 class Exp(Function):
 
     @staticmethod
-    def forward(ctx, input):
+    def forward(ctx, self: np.ndarray) -> np.ndarray:
         """Exponential of a tensor."""
-        ret = np.exp(input.clip(-88, 88))
+        ret = np.exp(self.clip(-88, 88))
         ctx.save_precomputed_tensors(ret)
         return ret
 
@@ -220,10 +232,10 @@ class Sum(Function):
     """
 
     @staticmethod
-    def forward(ctx, args, **_):
+    def forward(ctx, self: np.ndarray) -> np.ndarray:
         """Sum of all elements in a tensor."""
-        ctx.save_precomputed_tensors(args)
-        result = np.array([args.sum()])
+        ctx.save_precomputed_tensors(self)
+        result = np.array([self.sum()])
         return result
 
     @staticmethod
@@ -234,10 +246,10 @@ class Sum(Function):
 
 class Neg(Function):
     @staticmethod
-    def forward(ctx, *args, **_):
+    def forward(ctx, self: np.ndarray) -> np.ndarray:
         """Negation of a tensor."""
-        ctx.save_precomputed_tensors(*args)
-        return -args[0]
+        ctx.save_precomputed_tensors(self)
+        return -self
 
     @staticmethod
     def backward(ctx, grad_output: npt.NDArray):
@@ -252,10 +264,10 @@ class Mean(Function):
     """
 
     @staticmethod
-    def forward(ctx, args, **_):
+    def forward(ctx, self: np.ndarray) -> np.ndarray:
         """Mean of all elements in a tensor."""
-        ctx.save_precomputed_tensors(args)
-        result = np.array([args.mean()])
+        ctx.save_precomputed_tensors(self)
+        result = np.array([self.mean()])
         return result
 
     @staticmethod
@@ -273,10 +285,10 @@ class Max(Function):
     """
 
     @staticmethod
-    def forward(ctx, args, **_):
+    def forward(ctx, self: np.ndarray) -> np.ndarray:
         """Max of all elements in a tensor."""
-        ctx.save_precomputed_tensors(args)
-        result = np.array([args.max()])
+        ctx.save_precomputed_tensors(self)
+        result = np.array([self.max()])
         return result
 
     @staticmethod
@@ -286,10 +298,10 @@ class Max(Function):
 
 class MatMul(Function):
     @staticmethod
-    def forward(ctx, *args, **_):
+    def forward(ctx, self: np.ndarray, tensor: np.ndarray) -> np.ndarray:
         """Matrix multiplication of two tensors."""
-        ctx.save_precomputed_tensors(*args)
-        return args[0] @ args[1]
+        ctx.save_precomputed_tensors(self, tensor)
+        return self @ tensor
 
     @staticmethod
     def backward(ctx, grad_output: npt.NDArray):
@@ -298,16 +310,14 @@ class MatMul(Function):
         grad_weight = np.swapaxes(input, -2, -1) @ grad_output
         return grad_input, grad_weight
 
-
 Dot = MatMul
-
 
 class Log(Function):
     @staticmethod
-    def forward(ctx, *args, **_):
+    def forward(ctx, self: np.ndarray) -> np.ndarray:
         """Log of a tensor."""
-        ctx.save_precomputed_tensors(*args)
-        return np.log(args[0])
+        ctx.save_precomputed_tensors(self)
+        return np.log(self)
 
     @staticmethod
     def backward(ctx, grad_output: npt.NDArray):
@@ -317,28 +327,25 @@ class Log(Function):
 
 class LogSoftmax(Function):
     @staticmethod
-    def forward(ctx, *args, **_):
+    def forward(ctx, self: np.ndarray, dim: int = 0) -> np.ndarray:
         """Log softmax of a tensor."""
-        ctx.save_precomputed_tensors(*args)
-        x = args[0]
-        x_off = x - np.max(x)
+        ctx.save_precomputed_tensors(self)
+        x_off = self - np.max(self)
         ctx.x_off = x_off
         return x_off - np.log(np.exp(x_off).sum())
 
     @staticmethod
     def backward(ctx, grad_output: npt.NDArray):
-        (input,) = ctx._precomputed_tensors
         x_off = ctx.x_off
         return grad_output - np.exp(x_off) * grad_output.sum()
 
 
 class Softmax(Function):
     @staticmethod
-    def forward(ctx, *args, **kwargs):
+    def forward(ctx, self: np.ndarray) -> np.ndarray:
         """Softmax of a tensor."""
-        ctx.save_precomputed_tensors(*args)
-        x = args[0]
-        return np.exp(x) / np.exp(x).sum()
+        ctx.save_precomputed_tensors(self)
+        return np.exp(self) / np.exp(self).sum()
 
     @staticmethod
     def backward(ctx, grad_output: npt.NDArray):
@@ -348,11 +355,10 @@ class Softmax(Function):
 
 class ReLU(Function):
     @staticmethod
-    def forward(ctx, *args, **_):
+    def forward(ctx, self: np.ndarray) -> np.ndarray:
         """ReLU of a tensor."""
-        ctx.save_precomputed_tensors(*args)
-        x = args[0]
-        return np.maximum(x, 0)
+        ctx.save_precomputed_tensors(self)
+        return np.maximum(self, 0)
 
     @staticmethod
     def backward(ctx, grad_output: npt.NDArray):
@@ -362,14 +368,14 @@ class ReLU(Function):
 
 class Transpose(Function):
     @staticmethod
-    def forward(ctx, x, order):
+    def forward(ctx, self: np.ndarray, order) -> np.ndarray:
         ctx.save_precomputed_tensors(order)
         # TODO: Not sure how to handle this
         order = order[0]
         ctx.order = order
         # Float to int
         order = [int(o) for o in order]
-        return np.transpose(x, order)
+        return np.transpose(self, order)
 
     @staticmethod
     def backward(ctx, x):
@@ -387,14 +393,11 @@ class Take(Function):
     """
 
     @staticmethod
-    def forward(ctx: "Function", *args, **kwargs):
+    def forward(ctx: "Function", self: np.ndarray, tensor: np.ndarray, dim=0) -> np.ndarray:
         """Take of a tensor."""
-        ctx.save_precomputed_tensors(*args)
-        axis = kwargs.get("dim", 0)
-        ctx.axis = axis
-        x = args[0]
-        result = np.take(x, args[1], axis=axis)
-        return result
+        ctx.save_precomputed_tensors(self, tensor)
+        ctx.axis = dim
+        return np.take(self, tensor, axis=ctx.axis)
 
     @staticmethod
     def backward(ctx, grad_output: npt.NDArray):
@@ -411,30 +414,28 @@ class Take(Function):
         np.add.at(grad_input, indices_shape, grad_output)
 
         return grad_input
+    
+def register_tensor_op(name, op):
+    register(name, op, Tensor)
 
-
-def register(name, fxn):
-    setattr(Tensor, name, partialmethod(fxn.apply, fxn))
-
-
-register("add", Add)
-register("sum", Sum)
-register("mean", Mean)
-register("max", Max)
-register("mul", Mul)
-register("sub", Sub)
-register("div", Div)
 # register("pow", Pow)
-register("dot", Dot)
-register("matmul", MatMul)
-register("exp", Exp)
+register_tensor_op("add", Add)
+register_tensor_op("sum", Sum)
+register_tensor_op("mean", Mean)
+register_tensor_op("max", Max)
+register_tensor_op("mul", Mul)
+register_tensor_op("sub", Sub)
+register_tensor_op("div", Div)
+register_tensor_op("dot", Dot)
+register_tensor_op("matmul", MatMul)
+register_tensor_op("exp", Exp)
 
-register("log", Log)
-register("log_softmax", LogSoftmax)
-register("softmax", Softmax)
-register("relu", ReLU)
-register("neg", Neg)
+register_tensor_op("log", Log)
+register_tensor_op("log_softmax", LogSoftmax)
+register_tensor_op("softmax", Softmax)
+register_tensor_op("relu", ReLU)
+register_tensor_op("neg", Neg)
 
 
-register("take", Take)
-register("transpose", Transpose)
+register_tensor_op("take", Take)
+register_tensor_op("transpose", Transpose)

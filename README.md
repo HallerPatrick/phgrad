@@ -23,21 +23,21 @@ The [example](./examples) folder will contain some examples of how to use the li
 ```python
 
 from phgrad.engine import PensorTensor as pensor
-from phgrad.nn import Linear
+from phgrad.nn import Linear, Module
 
-class Classifier:
+class Classifier(Module):
     def __init__(self):
-        self.l1 = Linear(784, 64, bias=False)
-        self.l2 = Linear(64, 1, bias=False)
+        self.l1 = Linear(784, 64, bias=True)
+        self.l2 = Linear(64, 1, bias=True)
 
-    def __call__(self, x: pensor):
+    def forward(self, x: pensor):
         x = self.l1(x)
         x = x.relu()
         x = self.l2(x)
         return x.log_softmax()
 
 model = Classifier()
-x = pensor(np.random.randn(1, 784))
+x = pensor(np.random.randn(32, 784))
 y = model(x)
 y.backward()
 

@@ -27,7 +27,7 @@ class Tensor:
         self.data[idx] = value
 
     @property
-    def shape(self):
+    def shape(self) -> Tuple[int]:
         """Return the shape of the tensor."""
         return self.data.shape
 
@@ -89,7 +89,7 @@ class Tensor:
             t.backward(False)
 
     @property
-    def T(self):
+    def T(self) -> "Tensor":
         """Return the transpose of the tensor."""
         return self.transpose((1, 0))
 
@@ -99,25 +99,24 @@ class Tensor:
     def __repr__(self) -> str:
         return self.__str__()
 
-    def __add__(self, other):
+    def __add__(self, other: Union["Tensor", float, int]) -> "Tensor":
         return self.add(other)
 
-    def __radd__(self, other):
+    def __radd__(self, other: Union["Tensor", float, int]) -> "Tensor":
         return self.add(other)
 
-    def __sub__(self, other):
+    def __sub__(self, other: Union["Tensor", float, int]) -> "Tensor":
         return self.sub(other)
 
-    def __rsub__(self, other):
+    def __rsub__(self, other: Union["Tensor", float, int]) -> "Tensor":
         return self.sub(other)
 
-    def __mul__(self, other):
+    def __mul__(self, other: Union["Tensor", float, int]) -> "Tensor":
         return self.mul(other)
 
-    def __rmul__(self, other):
+    def __rmul__(self, other: Union["Tensor", float, int]) -> "Tensor":
         return self.mul(other)
 
-    # neg
     def __neg__(self):
         return self.neg()
 
@@ -130,3 +129,4 @@ class Tensor:
 
 # We do it like Georg Hotz and build the tensors ops and at them dinamically
 from . import ops
+# from .utils import generate_stub_for_class; generate_stub_for_class(Tensor, "engine")
