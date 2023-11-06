@@ -1,14 +1,18 @@
+import sys
+
 import requests, gzip, os, hashlib
 import numpy as np
+from tqdm import tqdm
 
-from phgrad.engine import PensorTensor
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from phgrad.engine import Tensor
 from phgrad.nn import Linear 
 from phgrad.fun import argmax
 from phgrad.loss import nllloss
 from phgrad.optim import SGD
 from examples.viz_graph import draw_dot
 
-from tqdm import tqdm
 
 
 def fetch(url):
@@ -41,11 +45,19 @@ Y_test = np.eye(10)[Y_test.reshape(-1)]
 
 
 class Classifier:
-    def __init__(self) -> None:
-        self.l1 = Linear(784, 64, bias=False)
-        self.l2 = Linear(64, 10, bias=False)
+    """A simple MLP classifier.
 
-    def __call__(self, x: PensorTensor):
+    We getting with and without a bias term a accuracy of 85%. We also converge way slower
+    than torch.
+
+    Loss also seem to spike a lot.
+    
+    """
+    def __init__(self) -> None:
+        self.l1 = Linear(784, 64)
+        self.l2 = Linear(64, 10)
+
+    def __call__(self, x: Tensor):
         x = self.l1(x)
         x = x.relu()
         x = self.l2(x)
@@ -58,11 +70,15 @@ class Classifier:
 import torch
 
 class TorchClassifier(torch.nn.Module):
+    """A simple MLP classifier.
 
+    We getting with and without a bias term a accuracy of 93%.
+
+    """
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
-        self.l1 = torch.nn.Linear(784, 64, bias=False)
-        self.l2 = torch.nn.Linear(64, 10, bias=False)
+        self.l1 = torch.nn.Linear(784, 64, bias=True)
+        self.l2 = torch.nn.Linear(64, 10, bias=True)
 
     def forward(self, x):
         x = self.l1(x)
@@ -81,7 +97,7 @@ torch_optimizer = torch.optim.SGD(torch_classifier.parameters(), lr=0.01)
 total_correct = 0  # initialize total number of correct predictions
 total_samples = 0
 
-TORCH = True
+TORCH = False
 
 pbar = tqdm(enumerate(zip(X_train, Y_train)), total=max_steps)
 for step, (sample, target) in pbar:
@@ -101,14 +117,14 @@ for step, (sample, target) in pbar:
     else:
         optimizer.zero_grad()
 
-        sample = PensorTensor(np.expand_dims(sample, 0))
+        sample = Tensor(np.float32(np.expand_dims(sample, 0)))
         result = classifier(sample)
         logits = result.softmax()
         pred_idx = argmax(logits, dim=1)
         target = target.tolist()
         target = list(map(int, target))
         target_idx = np.argmax(target, axis=0)
-        loss = nllloss(result, PensorTensor(np.array([[target_idx]]), requires_grad=False))
+        loss = nllloss(result, Tensor(np.array([[target_idx]]), requires_grad=False))
         loss.backward()
         optimizer.step()
         total_correct += int(pred_idx == target_idx)

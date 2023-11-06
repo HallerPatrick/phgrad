@@ -3,7 +3,7 @@ from typing import Any, Tuple, Union, List, Optional
 import numpy as np
 import numpy.typing as npt
 
-class PensorTensor:
+class Tensor:
     def __init__(self, value: npt.NDArray, requires_grad=True):
         if type(value) in [np.float64, np.float32, np.float16, np.float128, np.int64]:
             value = np.array(value)
@@ -20,8 +20,8 @@ class PensorTensor:
         # It contains the operation that created this tensor and the tensors
         self.ctx = None
 
-    def __getitem__(self, idx) -> "PensorTensor":
-        return PensorTensor(self.data[idx])
+    def __getitem__(self, idx) -> "Tensor":
+        return Tensor(self.data[idx])
 
     def __setitem__(self, idx, value):
         self.data[idx] = value
@@ -116,10 +116,17 @@ class PensorTensor:
 
     def __rmul__(self, other):
         return self.mul(other)
-    
+
     # neg
     def __neg__(self):
         return self.neg()
+
+    # TODO: Define log_softmax as a composition of exisiting differentiable ops 
+    def logsoftmax(self):
+        raise NotImplementedError
+        # m = self.max(axis=len(self.shape)-1, keepdim=True)
+        # ss = m + (self-m).exp().sum(axis=len(self.shape)-1, keepdim=True).log()
+        # return self - ss
 
 # We do it like Georg Hotz and build the tensors ops and at them dinamically
 from . import ops

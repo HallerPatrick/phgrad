@@ -9,7 +9,7 @@ from torch.nn import Linear as TorchLinear
 
 
 from phgrad.nn import Linear
-from phgrad.engine import PensorTensor as pensor
+from phgrad.engine import Tensor
 from phgrad.optim import SGD
 
 
@@ -22,7 +22,7 @@ class TestLinearLayer(unittest.TestCase):
         linear = Linear(2, 1, bias=False)
         linear.weights.data = tlinear.weight.detach().numpy()
 
-        result2 = linear(pensor(np.array([[1, 2]], dtype=np.float32)))
+        result2 = linear(Tensor(np.array([[1, 2]], dtype=np.float32)))
 
         result.backward()
         result2.backward()
@@ -30,6 +30,25 @@ class TestLinearLayer(unittest.TestCase):
         self.assertEqual(result.shape, result2.shape)
         np.testing.assert_allclose(result.detach().numpy(), result2.data)
         np.testing.assert_allclose(tlinear.weight.grad, linear.weights.grad)
+
+    def test_linear_layer_bias(self):
+        tlinear = TorchLinear(2, 1, bias=True)
+
+        result = tlinear(torch.tensor([[1, 2]], dtype=torch.float32))
+
+        linear = Linear(2, 1, bias=True)
+        linear.weights.data = tlinear.weight.detach().numpy()
+        linear.biases.data = tlinear.bias.detach().numpy()
+
+        result2 = linear(Tensor(np.array([[1, 2]], dtype=np.float32)))
+
+        result.backward()
+        result2.backward()
+
+        self.assertEqual(result.shape, result2.shape)
+        np.testing.assert_allclose(result.detach().numpy(), result2.data)
+        np.testing.assert_allclose(tlinear.weight.grad, linear.weights.grad)
+        np.testing.assert_allclose(tlinear.bias.grad, linear.biases.grad)
 
     def test_mlp(self):
         class TorchMLP(torch.nn.Module):
@@ -66,7 +85,7 @@ class TestLinearLayer(unittest.TestCase):
         mlp.l2.weights.data = torch_mlp.l2.weight.detach().numpy()
 
         result = torch_mlp(torch.tensor([[1, 2]], dtype=torch.float32))
-        result2 = mlp(pensor(np.array([[1, 2]], dtype=np.float32)))
+        result2 = mlp(Tensor(np.array([[1, 2]], dtype=np.float32)))
 
         result.backward()
         result2.backward()
@@ -80,7 +99,7 @@ class TestLinearLayer(unittest.TestCase):
             torch_optimizer.zero_grad()
 
             result = torch_mlp(torch.tensor([[1, 2]], dtype=torch.float32))
-            result2 = mlp(pensor(np.array([[1, 2]], dtype=np.float32)))
+            result2 = mlp(Tensor(np.array([[1, 2]], dtype=np.float32)))
 
             result.backward()
             result2.backward()
@@ -140,7 +159,7 @@ class TestLinearLayer(unittest.TestCase):
             random_input = np.random.randn(1, 784)
 
             result = torch_classifier(torch.tensor(random_input, dtype=torch.float32))
-            result2 = classifier(pensor(np.array(random_input, dtype=np.float32)))
+            result2 = classifier(Tensor(np.array(random_input, dtype=np.float32)))
             result = result.mean()
             result2 = result2.mean()
 
@@ -150,7 +169,6 @@ class TestLinearLayer(unittest.TestCase):
             optimizer.step()
             torch_optimizer.step()
 
-            print(result.detach().numpy(), result2.data)
             np.testing.assert_allclose(result.detach().numpy(), result2.data, rtol=1e-3, atol=1e-3)
 
             # np.testing.assert_allclose(

@@ -2,9 +2,9 @@ from typing import List
 
 import numpy as np
 
-from .engine import PensorTensor
+from .engine import Tensor
 
-def nllloss(inputs: PensorTensor, targets: PensorTensor, reduce="mean"):
+def nllloss(inputs: Tensor, targets: Tensor, reduce="mean"):
     """Negative log likelihood loss.
 
     Args:
@@ -34,7 +34,7 @@ def nllloss(inputs: PensorTensor, targets: PensorTensor, reduce="mean"):
     return loss
 
 
-def cross_entropy(inputs: PensorTensor, target: int):
+def cross_entropy(inputs: Tensor, target: int):
     """Cross entropy loss.
 
     Args:

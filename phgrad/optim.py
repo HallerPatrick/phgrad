@@ -1,10 +1,10 @@
 from typing import List
 
-from .engine import PensorTensor
+from .engine import Tensor
 
 class SGD:
 
-    def __init__(self, params: List[PensorTensor], lr=0.01):
+    def __init__(self, params: List[Tensor], lr=0.01):
         self.params = [p for p in params if p.requires_grad]
         self.lr = lr
 

@@ -3,7 +3,7 @@ import unittest
 import numpy as np
 
 from phgrad.loss import nllloss, cross_entropy
-from phgrad.engine import PensorTensor as pensor
+from phgrad.engine import Tensor as Tensor
 
 
 class TestLoss(unittest.TestCase):
@@ -12,11 +12,11 @@ class TestLoss(unittest.TestCase):
     @unittest.skip("Not implemented")
     def test_cross_entropy(self):
             
-        t1 = pensor(np.array([[1, 2, 3]]))
-        t2 = pensor(np.array([2]))
+        t1 = Tensor(np.array([[1, 2, 3]]))
+        t2 = Tensor(np.array([2]))
         t3 = cross_entropy(t1, t2)
 
-        assert isinstance(t3, pensor)
+        assert isinstance(t3, Tensor)
         assert isinstance(t3.data, np.ndarray)
         assert t3.data.shape == (3,)
         assert np.all(t3.data == np.array([3, 3, 3]))
@@ -40,8 +40,8 @@ class TestLoss(unittest.TestCase):
 
     def test_nllloss(self):
 
-        t1 = pensor(np.array([[1, 2, 3]]))
-        t2 = pensor(np.array([[2]]), requires_grad=False)
+        t1 = Tensor(np.array([[1, 2, 3]]))
+        t2 = Tensor(np.array([[2]]), requires_grad=False)
         t3 = nllloss(t1, t2)
 
         t3.backward()

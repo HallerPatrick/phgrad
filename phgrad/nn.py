@@ -3,7 +3,7 @@ from typing import Any, List, Optional
 
 import numpy as np
 
-from .engine import PensorTensor
+from .engine import Tensor
 
 class Module:
     def __init__(self):
@@ -19,13 +19,13 @@ class Module:
 class Linear(Module):
     def __init__(self, inp_dim: int, output_dim: int, bias: bool = True):
         super().__init__()
-        self.weights = PensorTensor(np.random.randn(output_dim, inp_dim))
+        self.weights = Tensor(np.random.randn(output_dim, inp_dim))
         if bias:
-            self.biases = PensorTensor(np.random.randn(output_dim))
+            self.biases = Tensor(np.random.randn(output_dim))
         else:
             self.biases = None
 
-    def forward(self, t: PensorTensor) -> PensorTensor:
+    def forward(self, t: Tensor) -> Tensor:
         if self.biases is None:
             return t.matmul(self.weights.T)
         return t.matmul(self.weights.T) + self.biases
