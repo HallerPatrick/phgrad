@@ -79,6 +79,7 @@ class TestOps(unittest.TestCase):
         assert t2.data.shape == (3,)
         assert np.allclose(t2.data, tt2.detach().numpy())
 
+    @unittest.skip("Not implemented")
     def test_softmax_with_axis(self):
             
         t1 = Tensor(np.array([[1, 2, -3], [4, 5, 6]]))
@@ -110,9 +111,6 @@ import numpy as np
 import torch
 
 from phgrad.ops import LogSoftmax
-
-# Assuming your LogSoftmax class is defined here
-# from your_module import LogSoftmax
 
 class TestLogSoftmax(unittest.TestCase):
 

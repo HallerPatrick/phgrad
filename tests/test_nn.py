@@ -8,7 +8,7 @@ torch.manual_seed(69)
 from torch.nn import Linear as TorchLinear
 
 
-from phgrad.nn import Linear
+from phgrad.nn import Linear, MLP
 from phgrad.engine import Tensor
 from phgrad.optim import SGD
 
@@ -63,23 +63,9 @@ class TestLinearLayer(unittest.TestCase):
                 x = self.l2(x)
                 return x
 
-        class MLP:
-            def __init__(self) -> None:
-                self.l1 = Linear(2, 2, bias=False)
-                self.l2 = Linear(2, 1, bias=False)
-
-            def __call__(self, x):
-                x = self.l1(x)
-                x = x.relu()
-                x = self.l2(x)
-                return x
-
-            def parameters(self):
-                return [self.l1.weights, self.l2.weights]
-
         torch_mlp = TorchMLP()
         torch_optimizer = torch.optim.SGD(torch_mlp.parameters(), lr=0.01)
-        mlp = MLP()
+        mlp = MLP(2, 2, 1, bias=False)
         optimizer = SGD(mlp.parameters(), lr=0.01)
         mlp.l1.weights.data = torch_mlp.l1.weight.detach().numpy()
         mlp.l2.weights.data = torch_mlp.l2.weight.detach().numpy()
@@ -125,24 +111,11 @@ class TestLinearLayer(unittest.TestCase):
                 x = self.l1(x)
                 x = torch.relu(x)
                 x = self.l2(x)
-                return torch.nn.functional.log_softmax(x, dim=1)
-
-        class Classifier:
-            def __init__(self) -> None:
-                self.l1 = Linear(784, 10, bias=False)
-                self.l2 = Linear(10, 10, bias=False)
-
-            def __call__(self, x):
-                x = self.l1(x)
-                x = x.relu()
-                x = self.l2(x)
-                return x.log_softmax(dim=1)
-
-            def parameters(self):
-                return [self.l1.weights, self.l2.weights]
+                return x
+                # return torch.nn.functional.log_softmax(x, dim=1)
 
         torch_classifier = TorchClassifier()
-        classifier = Classifier()
+        classifier = MLP(784, 10, 10, bias=False)
 
         optimizer = SGD(list(classifier.parameters()), lr=0.01)
         torch_optimizer = torch.optim.SGD(torch_classifier.parameters(), lr=0.01)
@@ -150,22 +123,20 @@ class TestLinearLayer(unittest.TestCase):
         classifier.l1.weights.data = torch_classifier.l1.weight.detach().numpy()
         classifier.l2.weights.data = torch_classifier.l2.weight.detach().numpy()
 
-
         for _ in range(100):
             optimizer.zero_grad()
             torch_optimizer.zero_grad()
-        
+
             # Batch of 32 random images
             random_input = np.random.randn(32, 784)
-    
+
             result = torch_classifier(torch.tensor(random_input, dtype=torch.float32))
+            result = torch.nn.functional.log_softmax(result, dim=1)
             result2 = classifier(Tensor(np.array(random_input, dtype=np.float32)))
+            result2 = result2.log_softmax(dim=1)
 
             result = result.mean()
             result2 = result2.mean()
-
-            print(f"Torch: {result.item()}")
-            print(f"PHGRAD: {result2.first_item}")
 
             result.backward()
             result2.backward()
@@ -173,7 +144,66 @@ class TestLinearLayer(unittest.TestCase):
             optimizer.step()
             torch_optimizer.step()
 
-            np.testing.assert_allclose(result.detach().numpy(), result2.data, rtol=1e-3, atol=1e-3)
+            np.testing.assert_allclose(
+                result.detach().numpy(), result2.data, rtol=1e-3, atol=1e-3
+            )
+
+            np.testing.assert_allclose(
+                torch_classifier.l1.weight.detach().numpy(), classifier.l1.weights.data
+            )
+            np.testing.assert_allclose(
+                torch_classifier.l2.weight.detach().numpy(), classifier.l2.weights.data
+            )
+
+    def test_classifier_sparse_input(self):
+        class TorchClassifier(torch.nn.Module):
+            def __init__(self, *args, **kwargs) -> None:
+                super().__init__(*args, **kwargs)
+                self.l1 = torch.nn.Linear(784, 10, bias=False)
+                self.l2 = torch.nn.Linear(10, 10, bias=False)
+
+            def forward(self, x):
+                x = self.l1(x)
+                x = torch.relu(x)
+                x = self.l2(x)
+                return x
+                # return torch.nn.functional.log_softmax(x, dim=1)
+
+        torch_classifier = TorchClassifier()
+        classifier = MLP(784, 10, 10, bias=False)
+
+        optimizer = SGD(list(classifier.parameters()), lr=0.01)
+        torch_optimizer = torch.optim.SGD(torch_classifier.parameters(), lr=0.01)
+
+        classifier.l1.weights.data = torch_classifier.l1.weight.detach().numpy()
+        classifier.l2.weights.data = torch_classifier.l2.weight.detach().numpy()
+
+        for _ in range(100):
+            optimizer.zero_grad()
+            torch_optimizer.zero_grad()
+
+            # Batch of 32 random images
+            random_input = np.random.randn(32, 784)
+            # About half of the input is zero
+            random_input[random_input < 0] = 0
+
+            result = torch_classifier(torch.tensor(random_input, dtype=torch.float32))
+            result = torch.nn.functional.log_softmax(result, dim=1)
+            result2 = classifier(Tensor(np.array(random_input, dtype=np.float32)))
+            result2 = result2.log_softmax(dim=1)
+
+            result = result.mean()
+            result2 = result2.mean()
+
+            result.backward()
+            result2.backward()
+
+            optimizer.step()
+            torch_optimizer.step()
+
+            np.testing.assert_allclose(
+                result.detach().numpy(), result2.data, rtol=1e-3, atol=1e-3
+            )
 
             np.testing.assert_allclose(
                 torch_classifier.l1.weight.detach().numpy(), classifier.l1.weights.data

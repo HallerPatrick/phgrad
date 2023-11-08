@@ -4,6 +4,8 @@ import numpy as np
 import numpy.typing as npt
 
 class Tensor:
+    __slots__ = ("data", "grad", "requires_grad", "ctx")
+
     def __init__(self, value: npt.NDArray, requires_grad=True):
         if type(value) in [np.float64, np.float32, np.float16, np.float128, np.int64]:
             value = np.array(value)

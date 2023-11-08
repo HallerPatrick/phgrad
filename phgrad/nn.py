@@ -37,7 +37,19 @@ class Linear(Module):
         return [self.weights, self.biases]
 
 
-class Dropout(Module):
-    pass
+class MLP(Module):
+    """A simple Multi Layer Perceptron."""
 
+    def __init__(self, inp_dim: int, hidden_size: int, output_dim: int, bias: bool = True):
+        super().__init__()
+        self.l1 = Linear(inp_dim, hidden_size, bias=bias)
+        self.l2 = Linear(hidden_size, output_dim, bias=bias)
 
+    def forward(self, t: Tensor) -> Tensor:
+        t = self.l1(t)
+        t = t.relu()
+        t = self.l2(t)
+        return t
+    
+    def parameters(self):
+        return self.l1.parameters() + self.l2.parameters()
