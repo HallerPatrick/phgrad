@@ -15,6 +15,7 @@ from examples.viz_graph import draw_dot
 
 
 
+
 def fetch(url):
     fp = os.path.join("/tmp", hashlib.md5(url.encode("utf-8")).hexdigest())
     if os.path.isfile(fp):
@@ -124,7 +125,8 @@ for step, (sample, target) in pbar:
         target = target.tolist()
         target = list(map(int, target))
         target_idx = np.argmax(target, axis=0)
-        loss = nllloss(result, Tensor(np.array([[target_idx]]), requires_grad=False))
+        target_vec = Tensor(np.array([[target_idx]]), requires_grad=False)
+        loss = nllloss(result, target_vec)
         loss.backward()
         optimizer.step()
         total_correct += int(pred_idx == target_idx)

@@ -4,6 +4,7 @@ from typing import Any, List, Optional
 import numpy as np
 
 from .engine import Tensor
+from .init import he_initialization
 
 class Module:
     def __init__(self):
@@ -19,9 +20,9 @@ class Module:
 class Linear(Module):
     def __init__(self, inp_dim: int, output_dim: int, bias: bool = True):
         super().__init__()
-        self.weights = Tensor(np.random.randn(output_dim, inp_dim))
+        self.weights = Tensor(he_initialization((output_dim, inp_dim)))
         if bias:
-            self.biases = Tensor(np.random.randn(output_dim))
+            self.biases = Tensor(he_initialization((output_dim, )))
         else:
             self.biases = None
 

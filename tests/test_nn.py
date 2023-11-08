@@ -136,11 +136,10 @@ class TestLinearLayer(unittest.TestCase):
                 x = self.l1(x)
                 x = x.relu()
                 x = self.l2(x)
-                return x.log_softmax()
+                return x.log_softmax(dim=1)
 
             def parameters(self):
-                yield from self.l1.parameters()
-                yield from self.l2.parameters()
+                return [self.l1.weights, self.l2.weights]
 
         torch_classifier = TorchClassifier()
         classifier = Classifier()
@@ -160,7 +159,9 @@ class TestLinearLayer(unittest.TestCase):
 
             result = torch_classifier(torch.tensor(random_input, dtype=torch.float32))
             result2 = classifier(Tensor(np.array(random_input, dtype=np.float32)))
+            print(torch.nn.functional.softmax(result))
             result = result.mean()
+            print(result)
             result2 = result2.mean()
 
             result.backward()

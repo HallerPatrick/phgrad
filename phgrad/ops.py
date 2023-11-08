@@ -27,6 +27,7 @@ import numpy as np
 from .engine import Tensor
 from .utils import register
 
+
 class Function:
     def __init__(self, *tensors: Tuple[npt.NDArray]) -> None:
         self.prev = tensors
@@ -71,6 +72,7 @@ class Function:
     def __repr__(self) -> str:
         return self.__str__()
 
+
 def unbroadcast(grad, original_shape):
     """Numpy like any other tensor library does support broadcasting,
     which can happen for any binary operation. This function undoes
@@ -91,18 +93,22 @@ def unbroadcast(grad, original_shape):
     # by adding singleton dimensions at the beginning
     shape_diff = len(grad.shape) - len(original_shape)
     padded_original_shape = (1,) * shape_diff + original_shape
-    
+
     # Identify dimensions that were broadcasted
-    axes_to_sum = [i for i, (grad_dim, orig_dim) in enumerate(zip(grad.shape, padded_original_shape)) if orig_dim == 1 and grad_dim != 1]
-    
+    axes_to_sum = [
+        i
+        for i, (grad_dim, orig_dim) in enumerate(zip(grad.shape, padded_original_shape))
+        if orig_dim == 1 and grad_dim != 1
+    ]
+
     # Sum the gradient along these dimensions
     for axis in sorted(axes_to_sum, reverse=True):
         grad = grad.sum(axis=axis, keepdims=True)
-    
+
     # Remove singleton dimensions that were added to match the original shape
     if shape_diff > 0:
         grad = grad.reshape(original_shape)
-    
+
     return grad
 
 
@@ -145,7 +151,9 @@ class Mul(Function):
     @staticmethod
     def backward(ctx, grad_output: npt.NDArray):
         x, y = ctx._precomputed_tensors
-        return unbroadcast(grad_output * y, x.shape), unbroadcast(grad_output * x, y.shape)
+        return unbroadcast(grad_output * y, x.shape), unbroadcast(
+            grad_output * x, y.shape
+        )
 
 
 class Sub(Function):
@@ -168,6 +176,7 @@ class Sub(Function):
         x, y = ctx._precomputed_tensors
         return unbroadcast(grad_output, x.shape), unbroadcast(-grad_output, y.shape)
 
+
 class Div(Function):
     """Division function.
 
@@ -187,8 +196,9 @@ class Div(Function):
     def backward(ctx, grad_output: npt.NDArray):
         x, y = ctx._precomputed_tensors
         return unbroadcast(grad_output / y, x.shape), unbroadcast(
-            -grad_output * x / y ** 2, y.shape
+            -grad_output * x / y**2, y.shape
         )
+
 
 # class Pow(Function):
 #     @staticmethod
@@ -209,8 +219,8 @@ class Div(Function):
 #             ctx._precomputed_tensors[0]
 #         )
 
-class Exp(Function):
 
+class Exp(Function):
     @staticmethod
     def forward(ctx, self: np.ndarray) -> np.ndarray:
         """Exponential of a tensor."""
@@ -222,6 +232,7 @@ class Exp(Function):
     def backward(ctx, grad_output: npt.NDArray):
         (input,) = ctx._precomputed_tensors
         return grad_output * input
+
 
 class Sum(Function):
     """Sum function.
@@ -254,6 +265,7 @@ class Neg(Function):
     @staticmethod
     def backward(ctx, grad_output: npt.NDArray):
         return -grad_output
+
 
 class Mean(Function):
     """Mean function.
@@ -296,6 +308,7 @@ class Max(Function):
         (input_tensor,) = ctx._precomputed_tensors
         return grad_output * np.ones_like(input_tensor)
 
+
 class MatMul(Function):
     @staticmethod
     def forward(ctx, self: np.ndarray, tensor: np.ndarray) -> np.ndarray:
@@ -310,7 +323,9 @@ class MatMul(Function):
         grad_weight = np.swapaxes(input, -2, -1) @ grad_output
         return grad_input, grad_weight
 
+
 Dot = MatMul
+
 
 class Log(Function):
     @staticmethod
@@ -325,20 +340,82 @@ class Log(Function):
         return grad_output / input
 
 
+# class LogSoftmax(Function):
+#     @staticmethod
+#     def forward(ctx, self: np.ndarray, dim: int = 0) -> np.ndarray:
+#         """Log softmax of a tensor."""
+#         ctx.save_precomputed_tensors(self)
+#         ctx.dim = dim
+#         x_off = self - self.max(dim, keepdims=True)
+#         ctx.x_off = x_off
+#         return x_off - np.log(np.exp(x_off).sum(dim, keepdims=True))
+
+#     @staticmethod
+#     def backward(ctx, grad_output: npt.NDArray):
+#         x_off = ctx.x_off
+#         dim = ctx.dim
+#         return grad_output - np.exp(x_off) * grad_output.sum(dim, keepdims=True)
+
+
+# class LogSoftmax(Function):
+#     @staticmethod
+#     def forward(ctx, self: np.ndarray, dim: int = 0) -> np.ndarray:
+#         """Log softmax of a tensor."""
+#         ctx.save_precomputed_tensors(self)
+#         ctx.dim = dim
+#         # input_float = self.astype(np.float64)
+
+#         # x_off = input_float - input_float.max(dim, keepdims=True)
+
+#         # # Clipping x_off to prevent overflow in exp
+#         # x_off_clipped = np.clip(x_off, -np.inf, np.log(np.finfo(x_off.dtype).max))
+
+#         # softmax_output = np.exp(x_off_clipped) / np.exp(x_off_clipped).sum(
+#         #     dim, keepdims=True
+#         # )
+#         # ctx.softmax_output = softmax_output
+#         # # print("Softmax Output:", softmax_output)
+#         # return np.log(softmax_output)
+#         x_max = self.max(axis=dim, keepdims=True)
+#         shifted_logits = self - x_max
+#         exp_shifted = np.exp(shifted_logits)
+#         log_softmax_result = shifted_logits - np.log(np.sum(exp_shifted, axis=dim, keepdims=True))
+#         return log_softmax_result
+
+#     @staticmethod
+#     def backward(ctx, grad_output: npt.NDArray):
+#         softmax_output = ctx.softmax_output
+#         dim = ctx.dim
+#         return grad_output - softmax_output * grad_output.sum(dim, keepdims=True)
 class LogSoftmax(Function):
     @staticmethod
-    def forward(ctx, self: np.ndarray, dim: int = 0) -> np.ndarray:
+    def forward(ctx, input: np.ndarray, dim: int = 0) -> np.ndarray:
         """Log softmax of a tensor."""
-        ctx.save_precomputed_tensors(self)
-        x_off = self - np.max(self)
-        ctx.x_off = x_off
-        return x_off - np.log(np.exp(x_off).sum())
+        ctx.save_precomputed_tensors(input)
+        ctx.dim = dim
+
+        # Shift the input for numerical stability
+        x_max = input.max(axis=dim, keepdims=True)
+        shifted_logits = input - x_max
+        log_softmax_output = shifted_logits - np.log(np.sum(np.exp(shifted_logits), axis=dim, keepdims=True))
+        
+        return log_softmax_output
 
     @staticmethod
-    def backward(ctx, grad_output: npt.NDArray):
-        x_off = ctx.x_off
-        return grad_output - np.exp(x_off) * grad_output.sum()
+    def backward(ctx, grad_output: np.ndarray):
+        """Backward pass for log softmax."""
+        (input,) = ctx._precomputed_tensors
+        dim = ctx.dim
 
+        # Compute softmax
+        x_max = input.max(axis=dim, keepdims=True)
+        shifted_logits = input - x_max
+        softmax_output = np.exp(shifted_logits) / np.sum(np.exp(shifted_logits), axis=dim, keepdims=True)
+
+        # Compute gradient
+        grad_input = grad_output - softmax_output * np.sum(grad_output, axis=dim, keepdims=True)
+
+        return grad_input
 
 class Softmax(Function):
     @staticmethod
@@ -393,7 +470,9 @@ class Take(Function):
     """
 
     @staticmethod
-    def forward(ctx: "Function", self: np.ndarray, tensor: np.ndarray, dim=0) -> np.ndarray:
+    def forward(
+        ctx: "Function", self: np.ndarray, tensor: np.ndarray, dim=0
+    ) -> np.ndarray:
         """Take of a tensor."""
         ctx.save_precomputed_tensors(self, tensor)
         ctx.axis = dim
@@ -414,9 +493,11 @@ class Take(Function):
         np.add.at(grad_input, indices_shape, grad_output)
 
         return grad_input
-    
+
+
 def register_tensor_op(name, op):
     register(name, op, Tensor)
+
 
 # register("pow", Pow)
 register_tensor_op("add", Add)

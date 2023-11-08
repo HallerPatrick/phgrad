@@ -1,7 +1,12 @@
 from typing import *
 from numpy import ndarray
+import numpy.typing as npt
+import typing
 class Tensor:
     T: Any
+    requires_grad: bool
+    grad: Optional[ndarray[Any, dtype[+float64]]]
+    data: ndarray[Any, dtype[+float64]]
     def __add__(self, other: typing.Union[phgrad.engine.Tensor, float, int]) -> Tensor: ...
     def __getitem__(self, idx) -> Tensor: ...
     def __init__(self, value: numpy.ndarray[typing.Any, numpy.dtype[+_ScalarType_co]], requires_grad=True): ...
