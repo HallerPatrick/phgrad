@@ -19,7 +19,7 @@ checker to check the types of the functions. The stub files then contain
 the signature with the tensor type instead of the numpy array type.
 """
 
-from typing import List, Tuple
+from typing import List, Tuple, Optional
 
 import numpy.typing as npt
 import numpy as np
@@ -48,6 +48,8 @@ class Function:
         tt = x[0]
 
         converted_x = []
+        # TODO: We should not convert everything blindly to a tensor
+        # For now only convert numpy arrays
         for arg in x:
             if isinstance(arg, Tensor):
                 # TODO: check dtype, and what types can be used in combination
@@ -56,12 +58,28 @@ class Function:
                 #         f"Cannot apply {op} to tensors of different dtypes: {tt.dtype} and {arg.dtype}"
                 #     )
                 converted_x.append(arg)
-            else:
+            elif isinstance(arg, np.ndarray):
+                # TODO; We need to find a better way to check for dtypes and verification, for now we dont do it
                 converted_x.append(
-                    Tensor(np.array([arg], dtype=tt.dtype), requires_grad=False)
+                    Tensor(np.array(arg), requires_grad=False)
                 )
+                # converted_x.append(
+                #     Tensor(np.array(arg, dtype=tt.dtype), requires_grad=False)
+                # )
+            else:
+                converted_x.append(arg)
+
         ctx = op_function(*converted_x)
-        ret = Tensor(op_function.forward(ctx, *[t.data for t in converted_x], **kwargs))
+
+        # Why are we even converting to a tensor in the first place?
+        passing_args = []
+        for t in converted_x:
+            if isinstance(t, Tensor):
+                passing_args.append(t.data)
+            else:
+                passing_args.append(t)
+
+        ret = Tensor(op_function.forward(ctx, *passing_args, **kwargs))
         if ret.requires_grad:
             ret.ctx = ctx
         return ret
@@ -276,15 +294,29 @@ class Mean(Function):
     """
 
     @staticmethod
-    def forward(ctx, self: np.ndarray) -> np.ndarray:
+    def forward(ctx, self: np.ndarray, dim: Optional[int] = None) -> np.ndarray:
         """Mean of all elements in a tensor."""
         ctx.save_precomputed_tensors(self)
-        result = np.array([self.mean()])
+        ctx.dim = dim
+
+        if dim is None:
+            result = np.array([self.mean()])
+        else:
+            result = self.mean(axis=dim, keepdims=True)
+
         return result
 
     @staticmethod
     def backward(ctx, grad_output: npt.NDArray):
         (input_tensor,) = ctx._precomputed_tensors
+        dim = ctx.dim
+
+        if dim is not None:
+            shape = np.array(input_tensor.shape)
+            shape[dim] = 1
+            grad = grad_output / np.prod(shape)
+            return np.broadcast_to(grad, input_tensor.shape)
+
         return grad_output * np.ones_like(input_tensor) / len(input_tensor)
 
 
@@ -339,54 +371,6 @@ class Log(Function):
         (input,) = ctx._precomputed_tensors
         return grad_output / input
 
-
-# class LogSoftmax(Function):
-#     @staticmethod
-#     def forward(ctx, self: np.ndarray, dim: int = 0) -> np.ndarray:
-#         """Log softmax of a tensor."""
-#         ctx.save_precomputed_tensors(self)
-#         ctx.dim = dim
-#         x_off = self - self.max(dim, keepdims=True)
-#         ctx.x_off = x_off
-#         return x_off - np.log(np.exp(x_off).sum(dim, keepdims=True))
-
-#     @staticmethod
-#     def backward(ctx, grad_output: npt.NDArray):
-#         x_off = ctx.x_off
-#         dim = ctx.dim
-#         return grad_output - np.exp(x_off) * grad_output.sum(dim, keepdims=True)
-
-
-# class LogSoftmax(Function):
-#     @staticmethod
-#     def forward(ctx, self: np.ndarray, dim: int = 0) -> np.ndarray:
-#         """Log softmax of a tensor."""
-#         ctx.save_precomputed_tensors(self)
-#         ctx.dim = dim
-#         # input_float = self.astype(np.float64)
-
-#         # x_off = input_float - input_float.max(dim, keepdims=True)
-
-#         # # Clipping x_off to prevent overflow in exp
-#         # x_off_clipped = np.clip(x_off, -np.inf, np.log(np.finfo(x_off.dtype).max))
-
-#         # softmax_output = np.exp(x_off_clipped) / np.exp(x_off_clipped).sum(
-#         #     dim, keepdims=True
-#         # )
-#         # ctx.softmax_output = softmax_output
-#         # # print("Softmax Output:", softmax_output)
-#         # return np.log(softmax_output)
-#         x_max = self.max(axis=dim, keepdims=True)
-#         shifted_logits = self - x_max
-#         exp_shifted = np.exp(shifted_logits)
-#         log_softmax_result = shifted_logits - np.log(np.sum(exp_shifted, axis=dim, keepdims=True))
-#         return log_softmax_result
-
-#     @staticmethod
-#     def backward(ctx, grad_output: npt.NDArray):
-#         softmax_output = ctx.softmax_output
-#         dim = ctx.dim
-#         return grad_output - softmax_output * grad_output.sum(dim, keepdims=True)
 class LogSoftmax(Function):
     @staticmethod
     def forward(ctx, input: np.ndarray, dim: int = 0) -> np.ndarray:
@@ -419,15 +403,17 @@ class LogSoftmax(Function):
 
 class Softmax(Function):
     @staticmethod
-    def forward(ctx, self: np.ndarray) -> np.ndarray:
+    def forward(ctx, self: np.ndarray, dim: int = 0) -> np.ndarray:
         """Softmax of a tensor."""
         ctx.save_precomputed_tensors(self)
-        return np.exp(self) / np.exp(self).sum()
+        ctx.dim = dim
+        return np.exp(self) / np.exp(self).sum(axis=dim)
 
     @staticmethod
     def backward(ctx, grad_output: npt.NDArray):
         (input,) = ctx._precomputed_tensors
-        return grad_output * np.exp(input) * (1 - np.exp(input).sum())
+        dim = ctx.dim
+        return grad_output * np.exp(input) * (1 - np.exp(input).sum(axis=dim))
 
 
 class ReLU(Function):
@@ -448,10 +434,9 @@ class Transpose(Function):
     def forward(ctx, self: np.ndarray, order) -> np.ndarray:
         ctx.save_precomputed_tensors(order)
         # TODO: Not sure how to handle this
-        order = order[0]
         ctx.order = order
         # Float to int
-        order = [int(o) for o in order]
+        # order = [int(o) for o in order]
         return np.transpose(self, order)
 
     @staticmethod
@@ -459,41 +444,86 @@ class Transpose(Function):
         order = ctx._precomputed_tensors[0]
         return np.transpose(x, tuple(np.argsort(ctx.order)))
 
+class Reshape(Function):
+
+    @staticmethod
+    def forward(ctx, self: np.ndarray, shape: Tuple[int]) -> np.ndarray:
+        ctx.save_precomputed_tensors(self.shape)
+        return np.reshape(self, shape)
+
+    @staticmethod
+    def backward(ctx, grad_output: np.ndarray):
+        input_shape = ctx._precomputed_tensors[0]
+        return np.reshape(grad_output, input_shape)
+
+
 
 class Take(Function):
-    """Take function.
+    """Take function without a dimension parameter.
 
-    Function:
-    f(x, y) = x.take(y)
-    d/dx f(x, y) = 1
-    d/dy f(x, y) = 1
+    NOTE: The current implementation only works with flat indices
+
     """
 
     @staticmethod
-    def forward(
-        ctx: "Function", self: np.ndarray, tensor: np.ndarray, dim=0
-    ) -> np.ndarray:
-        """Take of a tensor."""
-        ctx.save_precomputed_tensors(self, tensor)
-        ctx.axis = dim
-        return np.take(self, tensor, axis=ctx.axis)
+    def forward(ctx, input: np.ndarray, indices: np.ndarray) -> np.ndarray:
+        """Take elements from a tensor using indices."""
+        ctx.save_precomputed_tensors(input, indices)
+        # Assume indices are for the first dimension
+        return input[indices]
 
     @staticmethod
-    def backward(ctx, grad_output: npt.NDArray):
-        (input, indices) = ctx._precomputed_tensors
-        axis = ctx.axis
+    def backward(ctx, grad_output: np.ndarray):
+        input, indices = ctx._precomputed_tensors
         grad_input = np.zeros_like(input, dtype=np.float32)
 
-        # Reshape grad_output to match input shape
-        num_dims = len(input.shape)
-        indices_shape = [slice(None) for _ in range(num_dims)]
-        indices_shape[axis] = indices
-        indices_shape = tuple(indices_shape)
-
-        np.add.at(grad_input, indices_shape, grad_output)
+        # Iterate over each index and add the corresponding gradient
+        for idx, grad in zip(indices, grad_output):
+            grad_input[idx] += grad
 
         return grad_input
 
+# class Take(Function):
+#     """Take function.
+#
+#     Function:
+#     f(x, y) = x.take(y)
+#     d/dx f(x, y) = 1
+#     d/dy f(x, y) = 1
+#     """
+#
+#     @staticmethod
+#     def forward(
+#         ctx: "Function", self: np.ndarray, tensor: np.ndarray, dim=None
+#     ) -> np.ndarray:
+#         """Take of a tensor."""
+#         ctx.save_precomputed_tensors(self, tensor)
+#         ctx.axis = dim
+#         return np.take(self, tensor, axis=ctx.axis)
+#
+#     @staticmethod
+#     def backward(ctx, grad_output: npt.NDArray):
+#         input, indices = ctx._precomputed_tensors
+#         axis = ctx.axis
+#
+#         grad_input = np.zeros_like(input, dtype=np.float32)
+#
+#         # Handle the case when dim is None
+#         if axis is None:
+#             # In this case, each index in 'indices' maps to a row in grad_input
+#             # We need to add the entire row of grad_output to each of these indices
+#             for idx, grad in zip(np.nditer(indices), grad_output):
+#                 grad_input[idx] += grad
+#         else:
+#             # Expand grad_output if necessary to match the dimensionality of input
+#             if grad_output.ndim < input.ndim:
+#                 shape_diff = input.ndim - grad_output.ndim
+#                 grad_output = np.expand_dims(grad_output, axis=(axis + 1,)*shape_diff)
+#
+#             # Place the gradients in the correct locations
+#             np.add.at(grad_input, (indices if axis == 0 else np.s_[:, indices]), grad_output)
+#
+#         return grad_input
 
 def register_tensor_op(name, op):
     register(name, op, Tensor)
@@ -520,3 +550,4 @@ register_tensor_op("neg", Neg)
 
 register_tensor_op("take", Take)
 register_tensor_op("transpose", Transpose)
+register_tensor_op("reshape", Reshape)

@@ -11,9 +11,6 @@ from phgrad.nn import Linear
 from phgrad.fun import argmax
 from phgrad.loss import nllloss
 from phgrad.optim import SGD
-from examples.viz_graph import draw_dot
-
-
 
 
 def fetch(url):
@@ -65,8 +62,7 @@ class Classifier:
         return x.log_softmax()
     
     def parameters(self):
-        yield from self.l1.parameters()
-        yield from self.l2.parameters()
+        return self.l1.parameters() + self.l2.parameters()
 
 import torch
 
@@ -125,7 +121,7 @@ for step, (sample, target) in pbar:
         target = target.tolist()
         target = list(map(int, target))
         target_idx = np.argmax(target, axis=0)
-        target_vec = Tensor(np.array([[target_idx]]), requires_grad=False)
+        target_vec = Tensor(np.array([[target_idx]]), requires_grad=True)
         loss = nllloss(result, target_vec)
         loss.backward()
         optimizer.step()
@@ -138,9 +134,9 @@ for step, (sample, target) in pbar:
 
     accuracy = total_correct / total_samples  # calculate overall accuracy
     if TORCH:
-        pbar.set_description(f"Loss: {loss.data.item():5.2f}, Accuracy: {accuracy:.2f}")
+        pbar.set_description(f"Loss: {loss.data.item():5.5f}, Accuracy: {accuracy:.2f}")
     else:
-        pbar.set_description(f"Loss: {loss.data[0]:5.2f}, Accuracy: {accuracy:.2f}")
+        pbar.set_description(f"Loss: {loss.data[0]:5.5f}, Accuracy: {accuracy:.2f}")
 
 accuracy = total_correct / total_samples  # calculate overall accuracy
 print(f"Final accuracy: {accuracy}")

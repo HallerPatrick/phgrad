@@ -154,15 +154,18 @@ class TestLinearLayer(unittest.TestCase):
         for _ in range(100):
             optimizer.zero_grad()
             torch_optimizer.zero_grad()
-
-            random_input = np.random.randn(1, 784)
-
+        
+            # Batch of 32 random images
+            random_input = np.random.randn(32, 784)
+    
             result = torch_classifier(torch.tensor(random_input, dtype=torch.float32))
             result2 = classifier(Tensor(np.array(random_input, dtype=np.float32)))
-            print(torch.nn.functional.softmax(result))
+
             result = result.mean()
-            print(result)
             result2 = result2.mean()
+
+            print(f"Torch: {result.item()}")
+            print(f"PHGRAD: {result2.first_item}")
 
             result.backward()
             result2.backward()
@@ -172,9 +175,9 @@ class TestLinearLayer(unittest.TestCase):
 
             np.testing.assert_allclose(result.detach().numpy(), result2.data, rtol=1e-3, atol=1e-3)
 
-            # np.testing.assert_allclose(
-            #     torch_classifier.l1.weight.detach().numpy(), classifier.l1.weights.data
-            # )
-            # np.testing.assert_allclose(
-            #     torch_classifier.l2.weight.detach().numpy(), classifier.l2.weights.data
-            # )
+            np.testing.assert_allclose(
+                torch_classifier.l1.weight.detach().numpy(), classifier.l1.weights.data
+            )
+            np.testing.assert_allclose(
+                torch_classifier.l2.weight.detach().numpy(), classifier.l2.weights.data
+            )

@@ -70,11 +70,12 @@ class Tensor:
 
 
         # Iterate over all previous tensors and set the gradient
-        # print("=== All Backward pass === ")
-        # for t, g in zip(self.ctx.prev, grads):
-        #     print(f"Shapes: input {t.shape}, grad {g.shape}, op={self.ctx}")
-        #     # print("Values:", t, g)
-        #     print("=======")
+        print("=== All Backward pass === ")
+        for t, g in zip(self.ctx.prev, grads):
+            print(f"Shapes: input {t.shape}, grad {g.shape}, op={self.ctx}")
+            print("grads:", grads)
+            # print("Values:", t, g)
+            print("=======")
 
         for t, g in zip(self.ctx.prev, grads):
             if g is None:
@@ -94,7 +95,7 @@ class Tensor:
         return self.transpose((1, 0))
 
     def __str__(self) -> str:
-        return f"PensorTensor({self.data}, grad={self.grad})"
+        return f"Tensor({self.data}, grad_fn={self.ctx}, grad={self.grad})"
 
     def __repr__(self) -> str:
         return self.__str__()
@@ -126,6 +127,12 @@ class Tensor:
         # m = self.max(axis=len(self.shape)-1, keepdim=True)
         # ss = m + (self-m).exp().sum(axis=len(self.shape)-1, keepdim=True).log()
         # return self - ss
+
+
+    # === Some fine utils ===
+    @property
+    def first_item(self):
+        return self.data[0]
 
 # We do it like Georg Hotz and build the tensors ops and at them dinamically
 from . import ops

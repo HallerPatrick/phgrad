@@ -35,3 +35,9 @@ class Linear(Module):
         if self.biases is None:
             return [self.weights]
         return [self.weights, self.biases]
+
+
+class Dropout(Module):
+    pass
+
+

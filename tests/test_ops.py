@@ -7,6 +7,18 @@ from phgrad.engine import Tensor as Tensor
 from phgrad.ops import unbroadcast
 
 
+class TestReshape(unittest.TestCase):
+
+    def test_reshape(self):
+
+        tensor = Tensor(np.array([1, 2, 3, 4, 5, 6]))
+
+        tensor = tensor.reshape((2, 3))
+        assert isinstance(tensor, Tensor)
+        assert isinstance(tensor.data, np.ndarray)
+        assert tensor.data.shape == (2, 3)
+
+
 class TestOps(unittest.TestCase):
 
     # def test_unbroadcasting(self):
@@ -65,6 +77,19 @@ class TestOps(unittest.TestCase):
         assert isinstance(t2, Tensor)
         assert isinstance(t2.data, np.ndarray)
         assert t2.data.shape == (3,)
+        assert np.allclose(t2.data, tt2.detach().numpy())
+
+    def test_softmax_with_axis(self):
+            
+        t1 = Tensor(np.array([[1, 2, -3], [4, 5, 6]]))
+        t2 = t1.softmax()
+
+        tt1 = torch.tensor([[1, 2, -3], [4, 5, 6]], dtype=torch.float32)
+        tt2 = torch.nn.functional.softmax(tt1, dim=1)
+
+        assert isinstance(t2, Tensor)
+        assert isinstance(t2.data, np.ndarray)
+        assert t2.data.shape == (2, 3)
         assert np.allclose(t2.data, tt2.detach().numpy())
 
     def test_log_softmax(self):

@@ -15,15 +15,17 @@ def nllloss(inputs: Tensor, targets: Tensor, reduce="mean"):
         Scalar value of the loss.
     """
     assert reduce in ["mean", "sum"], "Invalid reduce"
-    
-    # TODO
-    # If targets are not one-hot encoded, convert them to one-hot.
-    # if len(np.squeeze(targets.data).shape) == 1:
-    #     print("One hot encoding")
-    #     targets = np.zeros((targets.shape[0], inputs.shape[1]))
-    #     targets[np.arange(targets.shape[0]), targets] = 1
 
-    loss = inputs.take(targets, dim=1).neg()
+   # Flatten the inputs and create an array of indices corresponding to the target classes
+    inputs_np = np.asarray(inputs.data, dtype=np.float32)
+    targets_np = np.asarray(targets.data, dtype=np.int64)
+
+    num_classes = inputs_np.shape[1]
+    indices = np.arange(len(targets_np)) * num_classes + targets_np
+    
+    inputs = inputs.reshape(-1)
+    our_log_probs = inputs.take(indices)
+    loss = our_log_probs.neg()
 
     if reduce == "mean":
         loss = loss.mean()
