@@ -47,8 +47,11 @@ class MLP(Module):
 
     def forward(self, t: Tensor) -> Tensor:
         t = self.l1(t)
+        # print("PHGRAD: After l1", t.shape, t)
         t = t.relu()
+        # print("PHGRAD: After relu", t.shape, t)
         t = self.l2(t)
+        # print("PHGRAD: After l2", t.shape, t)
         return t
     
     def parameters(self):

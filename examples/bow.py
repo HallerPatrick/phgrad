@@ -80,7 +80,7 @@ def load_imdb_dataset():
     pos_reviews = df[df['label'] == 1]
     neg_reviews = df[df['label'] == 0]
 
-    N = 10
+    N = 100
     pos_samples = pos_reviews.sample(N)
     neg_samples = neg_reviews.sample(N)
 
@@ -158,11 +158,7 @@ def main():
                     ).squeeze(1)
                     torch_optimizer.zero_grad()
                     
-                    print(bow_vec.shape)
-                    print(bow_vec)
                     log_probs = torch_classifier(bow_vec)
-                    print(log_probs.shape)
-                    print(log_probs)
                     loss = torch.nn.functional.nll_loss(log_probs, target)
                     # exit()
                     # torch_classifier.backward(loss)
@@ -192,28 +188,16 @@ def main():
                 target = Tensor(np.concatenate(currrent_batch_target, axis=0))
                 optimizer.zero_grad()
                 
-                print(bow_vec.shape)
-                print(bow_vec)
                 log_probs = model(bow_vec)
-                print(log_probs.shape)
-                print(log_probs)
-                # exit()
                 loss = loss_function(log_probs, target)
 
-                loss.data += l1_regularization(model.parameters(), 0.01)
+                # loss.data += l1_regularization(model.parameters(), 0.01)
 
-                print(loss.first_item)
                 loss.backward()
                 optimizer.step()
 
                 logits = log_probs.softmax()
-                # print("+++")
-                # print(logits.shape)
-                # print(logits)
                 pred_idxs = argmax(logits, dim=1)
-                # print(pred_idxs.shape)
-                # print(pred_idxs)
-                # exit()
 
                 target_idxs = np.squeeze(target.data, axis=1)
                 batch_correct = np.sum(
@@ -224,8 +208,6 @@ def main():
 
                 accuracy = total_correct / total_samples
                 loss = loss.data[0]
-                # print(loss)
-                # input()
 
                 pbar.set_description(f"Loss: {loss:5.5f}, Accuracy: {accuracy:.2f}")
 

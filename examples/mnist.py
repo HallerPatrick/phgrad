@@ -59,7 +59,7 @@ class Classifier:
         x = self.l1(x)
         x = x.relu()
         x = self.l2(x)
-        return x.log_softmax()
+        return x.log_softmax(dim=1)
     
     def parameters(self):
         return self.l1.parameters() + self.l2.parameters()

@@ -41,60 +41,139 @@ class TestMNIST(unittest.TestCase):
         self.Y_train = np.eye(10)[Y_train.reshape(-1)]
         self.Y_test = np.eye(10)[Y_test.reshape(-1)]
 
+    def setupModels(self):
+
+        class TorchClassifier(torch.nn.Module):
+            """A simple MLP classifier.
+
+            We getting with and without a bias term a accuracy of 93%.
+
+            """
+            def __init__(self, *args, **kwargs) -> None:
+                super().__init__(*args, **kwargs)
+                self.l1 = torch.nn.Linear(784, 64, bias=False)
+                self.l2 = torch.nn.Linear(64, 10, bias=False)
+
+            def forward(self, x):
+                x = self.l1(x)
+                # print("TORCH: After l1", x.shape, x)
+                x = torch.relu(x)
+                # print("TORCH: After l2", x.shape, x)
+                x = self.l2(x)
+                # print("TORCH: After l3", x.shape, x)
+                return x
+
+        self.torch_mlp = TorchClassifier()
+        self.mlp = MLP(784, 64, 10, bias=False)
+
+        self.mlp.l1.weights.data = self.torch_mlp.l1.weight.data.numpy()
+        self.mlp.l2.weights.data = self.torch_mlp.l2.weight.data.numpy()
+    
     # @unittest.skip("Not implemented")
     def test_mlp(self):
-        mlp = MLP(784, 64, 10, bias=False)
-        optimizer = SGD(mlp.parameters(), lr=0.01)
+        self.setupModels()
 
+        optimizer = SGD(self.mlp.parameters(), lr=0.01)
+        torch_optimizer = torch.optim.SGD(self.torch_mlp.parameters(), lr=0.01)
+
+        batch_size = 2
 
         for epoch in range(10):
-            for i in range(0, len(self.X_train), 32):
+            for i in range(0, len(self.X_train), batch_size):
                 optimizer.zero_grad()
-                x = Tensor(self.X_train[i:i + 32])
-                y = Tensor(np.argmax(self.Y_train[i:i + 32], axis=1))
-                y_pred = mlp(x)
-                # print(y_pred.shape, y.shape)
+                torch_optimizer.zero_grad()
+                x = Tensor(self.X_train[i:i + batch_size])
+                y = Tensor(np.argmax(self.Y_train[i:i + batch_size], axis=1))
+                y_pred = self.mlp(x)
+                y_pred = y_pred.log_softmax()
                 loss = nllloss(y_pred, y, reduce="mean")
                 loss.backward()
                 optimizer.step()
 
-            print(f"Epoch {epoch}: {loss.first_item}")
+            print(f"PhGrad -> Epoch {epoch}: {loss.first_item}")
 
-        y_pred = mlp(Tensor(self.X_test))
+        y_pred = self.mlp(Tensor(self.X_test))
         y_pred = np.argmax(y_pred.data, axis=1)
 
         accuracy = (y_pred == self.Y_test.argmax(axis=1)).mean()
         print(f"Accuracy: {accuracy}")
 
+
+    
     @unittest.skip("Not implemented")
     def test_mlp_torch(self):
+        self.setupModels()
         from torch import tensor
-        from torch.nn import NLLLoss
 
-        torch_mlp = torch.nn.Sequential(
-            torch.nn.Linear(784, 64, bias=False),
-            torch.nn.ReLU(),
-            torch.nn.Linear(64, 10, bias=False),
-            torch.nn.LogSoftmax(dim=1)
-        )
+        torch_optimizer = torch.optim.SGD(self.torch_mlp.parameters(), lr=0.01)
 
-        torch_optimizer = torch.optim.SGD(torch_mlp.parameters(), lr=0.01)
+        batch_size = 2
 
         for epoch in range(10):
-            for i in range(0, len(self.X_train), 32):
-                torch_mlp.zero_grad()
-                x = tensor(self.X_train[i:i + 32], dtype=torch.float32)
-                y = tensor(np.argmax(self.Y_train[i:i + 32], axis=1), dtype=torch.long)
-                y_pred = torch_mlp(x)
+            for i in range(0, len(self.X_train), batch_size):
+                self.torch_mlp.zero_grad()
+                x = tensor(self.X_train[i:i + batch_size], dtype=torch.float32)
+                y = tensor(np.argmax(self.Y_train[i:i + batch_size], axis=1), dtype=torch.long)
+                y_pred = self.torch_mlp(x)
                 loss = torch.nn.functional.nll_loss(y_pred, y, reduction="mean")
                 loss.backward()
                 torch_optimizer.step()
 
-            print(f"Epoch {epoch}: {loss.item()}")
+            print(f"Torch -> Epoch {epoch}: {loss.item()}")
 
-        y_pred = torch_mlp(tensor(self.X_test, dtype=torch.float32))
+        y_pred = self.torch_mlp(tensor(self.X_test, dtype=torch.float32))
         y_pred = torch.nn.functional.softmax(y_pred, dim=1)
         y_pred = y_pred.argmax(dim=1)
 
         accuracy = (y_pred == tensor(self.Y_test.argmax(axis=1), dtype=torch.long)).float().mean()
+        print(f"Accuracy: {accuracy}")
+
+    def test_combinedd(self):
+        from torch import tensor
+        self.setupModels()
+        optimizer = SGD(self.mlp.parameters(), lr=0.01)
+        torch_optimizer = torch.optim.SGD(self.torch_mlp.parameters(), lr=0.01)
+
+        batch_size = 2
+
+        for epoch in range(10):
+            for i in range(0, len(self.X_train), batch_size):
+                optimizer.zero_grad()
+                x = Tensor(self.X_train[i:i + batch_size])
+                y = Tensor(np.argmax(self.Y_train[i:i + batch_size], axis=1))
+
+                x_torch = tensor(self.X_train[i:i + batch_size], dtype=torch.float32)
+                y_torch = tensor(np.argmax(self.Y_train[i:i + batch_size], axis=1), dtype=torch.long)
+
+                self.assertEqual(x.shape, x_torch.shape)
+                self.assertEqual(y.shape, y_torch.shape)
+                # np.testing.assert_equal(x.data, x_torch.data.numpy())
+                # np.testing.assert_equal(y.data, y_torch.data.numpy())
+
+                y_pred = self.mlp(x)
+                y_pred_torch = self.torch_mlp(x_torch)
+                # np.testing.assert_allclose(y_pred, y_pred_torch.data.numpy())
+
+                y_pred = y_pred.log_softmax(dim=1)
+
+                y_pred_torch = torch.nn.functional.log_softmax(y_pred_torch, dim=1)
+                # np.testing.assert_allclose(y_pred, y_pred_torch.data.numpy())
+
+                loss = nllloss(y_pred, y, reduce="mean")
+                loss_torch = torch.nn.functional.nll_loss(y_pred_torch, y_torch, reduction="mean")
+
+                np.testing.assert_allclose(loss.first_item, loss_torch.data.numpy())
+
+                loss.backward()
+                optimizer.step()
+
+                loss_torch.backward()
+                torch_optimizer.step()
+
+            print(f"PhGrad -> Epoch {epoch}: {loss.first_item}")
+
+        y_pred = self.mlp(Tensor(self.X_test))
+        y_pred = np.argmax(y_pred.data, axis=1)
+
+        accuracy = (y_pred == self.Y_test.argmax(axis=1)).mean()
         print(f"Accuracy: {accuracy}")

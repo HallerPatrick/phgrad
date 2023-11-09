@@ -72,12 +72,12 @@ class Tensor:
 
 
         # Iterate over all previous tensors and set the gradient
-        print("=== All Backward pass === ")
-        for t, g in zip(self.ctx.prev, grads):
-            print(f"Shapes: input {t.shape}, grad {g.shape}, op={self.ctx}")
-            print("grads:", grads)
-            # print("Values:", t, g)
-            print("=======")
+        # print("=== All Backward pass === ")
+        # for t, g in zip(self.ctx.prev, grads):
+        #     print(f"Shapes: input {t.shape}, grad {g.shape}, op={self.ctx}")
+        #     print("grads:", grads)
+        #     # print("Values:", t, g)
+        #     print("=======")
 
         for t, g in zip(self.ctx.prev, grads):
             if g is None:
@@ -135,6 +135,16 @@ class Tensor:
     @property
     def first_item(self):
         return self.data[0]
+
+    def torch(self, requires_grad: bool = False):
+        try:
+            import torch
+        except ImportError:
+            raise ImportError("torch not installed (pip install torch)")
+
+        torch_tensor = torch.from_numpy(self.data)
+        torch_tensor.requires_grad = requires_grad
+        return torch_tensor
 
 # We do it like Georg Hotz and build the tensors ops and at them dinamically
 from . import ops
