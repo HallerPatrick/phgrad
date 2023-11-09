@@ -4,8 +4,8 @@ import torch
 
 from phgrad.engine import Tensor as Tensor
 
-class TestTensor(unittest.TestCase):
 
+class TestTensor(unittest.TestCase):
     def test_init(self):
         t = Tensor(np.array([1, 2, 3]))
 
@@ -14,7 +14,6 @@ class TestTensor(unittest.TestCase):
         assert t.data.shape == (3,)
 
     def test_add(self):
-
         t1 = Tensor(np.array([1, 2, 3]))
         t2 = Tensor(np.array([4, 5, 6]))
 
@@ -85,7 +84,9 @@ class TestTensor(unittest.TestCase):
         t3 = t2.dot(t1).sum()
         t3.backward()
 
-        assert np.allclose(t1.grad, np.array([[2.0, 2.0, 2.0], [0.0, 0.0, 0.0], [-2.0, -2.0, -2.0]]))
+        assert np.allclose(
+            t1.grad, np.array([[2.0, 2.0, 2.0], [0.0, 0.0, 0.0], [-2.0, -2.0, -2.0]])
+        )
         assert np.allclose(t2.grad, np.eye(1))
 
     def test_log_softmax(self):
@@ -109,7 +110,6 @@ class TestTensor(unittest.TestCase):
         assert t2.shape == (3, 1)
 
     def test_dot(self):
-
         t1 = Tensor(np.eye(3))
         t2 = Tensor(np.array([[2.0, 0.0, -2.0]]))
 

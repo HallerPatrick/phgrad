@@ -138,19 +138,10 @@ class TestLoss(unittest.TestCase):
 
         loss = nllloss(inputs, targets)
         loss.backward()  # Compute gradients
-        
+
         np.testing.assert_array_almost_equal(loss.first_item, 0.93602021)
         inputs = inputs.torch(requires_grad=True)
         targets = targets.torch(requires_grad=False)
 
         loss_torch = torch.nn.functional.nll_loss(inputs, targets)
         np.testing.assert_array_almost_equal(loss_torch.item(), loss.first_item)
-
-
-
-
-
-
-
-
-

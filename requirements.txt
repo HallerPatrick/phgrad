@@ -1,4 +1,7 @@
-torch
 numpy
+
+# Tests/Dev
+torch
 pytest
 requests
+pandas

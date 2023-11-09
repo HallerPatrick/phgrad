@@ -1,5 +1,6 @@
 import numpy as np
 
+
 def he_initialization(shape):
     """
     Initialize a weight matrix with the He normal initialization.

@@ -1,8 +1,7 @@
-from typing import List
-
 import numpy as np
 
 from .engine import Tensor
+
 
 def nllloss(inputs: Tensor, targets: Tensor, reduce="mean"):
     """Negative log likelihood loss.
@@ -16,13 +15,13 @@ def nllloss(inputs: Tensor, targets: Tensor, reduce="mean"):
     """
     assert reduce in ["mean", "sum"], "Invalid reduce"
 
-   # Flatten the inputs and create an array of indices corresponding to the target classes
+    # Flatten the inputs and create an array of indices corresponding to the target classes
     inputs_np = np.asarray(inputs.data, dtype=np.float32)
     targets_np = np.asarray(targets.data, dtype=np.int64)
 
     num_classes = inputs_np.shape[1]
     indices = np.arange(len(targets_np)) * num_classes + targets_np
-    
+
     inputs = inputs.reshape(-1)
     our_log_probs = inputs.take(indices)
     loss = our_log_probs.neg()

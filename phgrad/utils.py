@@ -1,18 +1,16 @@
 import inspect
 from typing import get_type_hints
-from types import MethodType
 from functools import partialmethod
 
 
 def register(name, fxn, cls):
-
     partial_method = partialmethod(fxn.apply, fxn)
 
     # TODO: This is not working
     # def wrapper(self, *args, **kwargs):
     #     method = partial_method.__get__(self)
     #     return method(*args, **kwargs)
-    
+
     # forward_signature = inspect.signature(fxn.forward)
     # return_annotation = forward_signature.return_annotation
 
@@ -21,33 +19,42 @@ def register(name, fxn, cls):
 
     # wrapper.__signature__ = new_signature
     # wrapper.__doc__ = fxn.__doc__
-    
+
     # method = MethodType(wrapper, cls)
     setattr(cls, name, partial_method)
 
 
-
 def generate_stub_for_class(cls, filename):
     class_name = cls.__name__
-    stub_lines = ["from typing import *", "from numpy import ndarray", f"class {class_name}:"]
-    
+    stub_lines = [
+        "from typing import *",
+        "from numpy import ndarray",
+        f"class {class_name}:",
+    ]
+
     # Get all methods and properties of the class
     for name, value in inspect.getmembers(cls):
         # print(name, value)
         if inspect.isfunction(value) or inspect.ismethod(value):
             try:
-                isstaticmethod = isinstance(inspect.getattr_static(cls, value.__name__), staticmethod)
+                isstaticmethod = isinstance(
+                    inspect.getattr_static(cls, value.__name__), staticmethod
+                )
             except AttributeError:
                 isstaticmethod = False
-            try:
-                isclassmethod = isinstance(inspect.getattr_static(cls, value.__name__), classmethod)
-            except AttributeError:
-                isclassmethod = False
+            # try:
+            #     isclassmethod = isinstance(
+            #         inspect.getattr_static(cls, value.__name__), classmethod
+            #     )
+            # except AttributeError:
+            #     isclassmethod = False
 
-            try:
-                isproperty = isinstance(inspect.getattr_static(cls, value.__name__), property)
-            except AttributeError:
-                isproperty = False
+            # try:
+            #     isproperty = isinstance(
+            #         inspect.getattr_static(cls, value.__name__), property
+            #     )
+            # except AttributeError:
+            #     isproperty = False
 
             # Get return type
             return_annotation_repr = inspect.signature(value).return_annotation
@@ -64,17 +71,17 @@ def generate_stub_for_class(cls, filename):
             args = []
 
             if not isstaticmethod:
-                args.append('self')
+                args.append("self")
 
             for arg in inspect.signature(value).parameters.values():
                 arg_name = arg.name
-                if arg_name == 'self':
+                if arg_name == "self":
                     continue
                 elif arg_name in hints:
                     args.append(f"{arg_name}: {hints[arg_name]}")
-                elif arg_name == 'kwargs':
+                elif arg_name == "kwargs":
                     args.append("**kwargs")
-                elif arg_name == 'args':
+                elif arg_name == "args":
                     args.append("*args")
                 elif arg_name == "tensor":
                     args.append(f"{arg_name}: Tensor")
@@ -94,13 +101,13 @@ def generate_stub_for_class(cls, filename):
             else:
                 stub_lines.append(f"    def {name}({args}): ...")
 
-        elif not name.startswith('__'):
+        elif not name.startswith("__"):
             # Assume attributes are of type Any for the stub
             stub_lines.append(f"    {name}: Any")
 
     # Join the lines and write to a .pyi file
     stub_content = "\n".join(stub_lines)
     stub_filename = f"phgrad/{filename}.pyi"
-    
-    with open(stub_filename, 'w') as stub_file:
+
+    with open(stub_filename, "w") as stub_file:
         stub_file.write(stub_content)

@@ -72,13 +72,14 @@ def make_bow_vector(sentence: str, word_to_ix: dict) -> Tensor:
 def make_target(label: int, label_to_ix: dict) -> Tensor:
     return Tensor(np.array([[label]]), requires_grad=False)
 
+
 def load_imdb_dataset():
     # We want a even disbtibution of positive and negative reviews
-    dataset = load_dataset('imdb')
-    df = pd.DataFrame(dataset['train'])
+    dataset = load_dataset("imdb")
+    df = pd.DataFrame(dataset["train"])
 
-    pos_reviews = df[df['label'] == 1]
-    neg_reviews = df[df['label'] == 0]
+    pos_reviews = df[df["label"] == 1]
+    neg_reviews = df[df["label"] == 0]
 
     N = 100
     pos_samples = pos_reviews.sample(N)
@@ -86,7 +87,9 @@ def load_imdb_dataset():
 
     balanced_dataset = pd.concat([pos_samples, neg_samples])
     balanced_dataset = balanced_dataset.sample(frac=1).reset_index(drop=True)
-    dataset_dict = {col: balanced_dataset[col].tolist() for col in balanced_dataset.columns}
+    dataset_dict = {
+        col: balanced_dataset[col].tolist() for col in balanced_dataset.columns
+    }
     balanced_dataset = Dataset.from_dict(dataset_dict)
     return balanced_dataset
 
@@ -120,7 +123,6 @@ def main():
 
     optimizer = SGD(model.parameters(), lr=1)
     torch_optimizer = torch.optim.SGD(torch_classifier.parameters(), lr=0.01)
-
 
     batch_size = 2
     TORCH = True
@@ -157,7 +159,7 @@ def main():
                         np.concatenate(currrent_batch_target, axis=0), dtype=torch.long
                     ).squeeze(1)
                     torch_optimizer.zero_grad()
-                    
+
                     log_probs = torch_classifier(bow_vec)
                     loss = torch.nn.functional.nll_loss(log_probs, target)
                     # exit()
@@ -173,9 +175,7 @@ def main():
                     # print(pred_idxs)
 
                     target_idxs = target.data
-                    batch_correct = np.sum(
-                        (pred_idxs.numpy() == target_idxs.numpy())
-                    )
+                    batch_correct = np.sum((pred_idxs.numpy() == target_idxs.numpy()))
                     total_correct += batch_correct
                     total_samples += batch_size
 
@@ -187,7 +187,7 @@ def main():
                 bow_vec = Tensor(np.concatenate(currrent_batch_source, axis=0))
                 target = Tensor(np.concatenate(currrent_batch_target, axis=0))
                 optimizer.zero_grad()
-                
+
                 log_probs = model(bow_vec)
                 loss = loss_function(log_probs, target)
 
@@ -200,9 +200,7 @@ def main():
                 pred_idxs = argmax(logits, dim=1)
 
                 target_idxs = np.squeeze(target.data, axis=1)
-                batch_correct = np.sum(
-                    (pred_idxs == target_idxs)
-                )
+                batch_correct = np.sum((pred_idxs == target_idxs))
                 total_correct += batch_correct
                 total_samples += batch_size
 

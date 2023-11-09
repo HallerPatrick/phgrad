@@ -4,8 +4,8 @@ import numpy as np
 
 from .engine import Tensor
 
-class SGD:
 
+class SGD:
     def __init__(self, params: List[Tensor], lr=0.01):
         self.params = [p for p in params if p.requires_grad]
         self.lr = lr
@@ -17,6 +17,7 @@ class SGD:
     def zero_grad(self):
         for p in self.params:
             p.grad = 0
+
 
 def l1_regularization(parameters: List[Tensor], lambda_reg: float):
     """

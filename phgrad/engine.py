@@ -1,7 +1,8 @@
-from typing import Any, Tuple, Union, List, Optional
+from typing import Optional, Tuple, Union
 
 import numpy as np
 import numpy.typing as npt
+
 
 class Tensor:
     __slots__ = ("data", "grad", "requires_grad", "ctx")
@@ -37,14 +38,19 @@ class Tensor:
     def dtype(self):
         """Return the dtype of the tensor."""
         return self.data.dtype
-    
+
     def deepwalk(self):
         def _deepwalk(node, visited, nodes):
             visited.add(node)
             if node.ctx:
-                [_deepwalk(i, visited, nodes) for i in node.ctx.prev if i not in visited]
+                [
+                    _deepwalk(i, visited, nodes)
+                    for i in node.ctx.prev
+                    if i not in visited
+                ]
                 nodes.append(node)
             return nodes
+
         return _deepwalk(self, set(), [])
 
     def backward(self, allow_fill=True):
@@ -70,7 +76,6 @@ class Tensor:
         if len(self.ctx.prev) == 1 or isinstance(grads, np.ndarray):
             grads = [grads]
 
-
         # Iterate over all previous tensors and set the gradient
         # print("=== All Backward pass === ")
         # for t, g in zip(self.ctx.prev, grads):
@@ -82,7 +87,7 @@ class Tensor:
         for t, g in zip(self.ctx.prev, grads):
             if g is None:
                 continue
-                
+
             assert (
                 g.shape == t.data.shape
             ), "Grad shape must match tensor shape, {} != {} ({})".format(
@@ -123,13 +128,12 @@ class Tensor:
     def __neg__(self):
         return self.neg()
 
-    # TODO: Define log_softmax as a composition of exisiting differentiable ops 
+    # TODO: Define log_softmax as a composition of exisiting differentiable ops
     def logsoftmax(self):
         raise NotImplementedError
         # m = self.max(axis=len(self.shape)-1, keepdim=True)
         # ss = m + (self-m).exp().sum(axis=len(self.shape)-1, keepdim=True).log()
         # return self - ss
-
 
     # === Some fine utils ===
     @property
@@ -146,6 +150,6 @@ class Tensor:
         torch_tensor.requires_grad = requires_grad
         return torch_tensor
 
+
 # We do it like Georg Hotz and build the tensors ops and at them dinamically
-from . import ops
 # from .utils import generate_stub_for_class; generate_stub_for_class(Tensor, "engine")

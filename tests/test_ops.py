@@ -1,18 +1,16 @@
 import unittest
 
 import numpy as np
-import torch
+
+from utils import requires_torch
 
 from phgrad.engine import Tensor as Tensor
-from phgrad.ops import unbroadcast
+from phgrad.ops import unbroadcast, LogSoftmax
 
 
 class TestReshape(unittest.TestCase):
-
     def test_reshape(self):
-
         tensor = Tensor(np.array([1, 2, 3, 4, 5, 6]))
-
         tensor = tensor.reshape((2, 3))
         assert isinstance(tensor, Tensor)
         assert isinstance(tensor.data, np.ndarray)
@@ -20,20 +18,6 @@ class TestReshape(unittest.TestCase):
 
 
 class TestOps(unittest.TestCase):
-
-    # def test_unbroadcasting(self):
-
-    #     t1 = pensor(np.array([1, 2, 3]))
-    #     t2 = pensor(np.array([4, 5, 6]))
-    #     t3 = t1 + t2
-    #     t3.sum().backward()
-
-    #     assert isinstance(t3, pensor)
-    #     assert isinstance(t3.data, np.ndarray)
-    #     assert t3.data.shape == (3,)
-    #     assert np.all(t3.data == np.array([5, 7, 9]))
-
-
     def test_add(self):
         t1 = Tensor(np.eye(3))
         t2 = Tensor(np.eye(3))
@@ -46,7 +30,6 @@ class TestOps(unittest.TestCase):
         # assert np.all(t3.data == np.array([5, 7, 9]))
 
     def test_add_with_broadcasting(self):
-
         t1 = Tensor(np.eye(3))
         t2 = Tensor(np.array([4, 5, 6]))
         t3 = t1 + t2
@@ -57,7 +40,6 @@ class TestOps(unittest.TestCase):
         assert t3.data.shape == (3, 3)
 
     def test_relu(self):
-
         t1 = Tensor(np.array([1, 2, -3]))
         t2 = t1.relu()
 
@@ -66,7 +48,9 @@ class TestOps(unittest.TestCase):
         assert t2.data.shape == (3,)
         assert np.all(t2.data == np.array([1, 2, 0]))
 
+    @requires_torch
     def test_softmax(self):
+        import torch
 
         t1 = Tensor(np.array([1, 2, -3]))
         t2 = t1.softmax()
@@ -79,9 +63,9 @@ class TestOps(unittest.TestCase):
         assert t2.data.shape == (3,)
         assert np.allclose(t2.data, tt2.detach().numpy())
 
+    @requires_torch
     @unittest.skip("Not implemented")
     def test_softmax_with_axis(self):
-            
         t1 = Tensor(np.array([[1, 2, -3], [4, 5, 6]]))
         t2 = t1.softmax()
 
@@ -93,7 +77,9 @@ class TestOps(unittest.TestCase):
         assert t2.data.shape == (2, 3)
         assert np.allclose(t2.data, tt2.detach().numpy())
 
+    @requires_torch
     def test_log_softmax(self):
+        import torch
 
         t1 = Tensor(np.array([1, 2, -3]))
         t2 = t1.log_softmax()
@@ -106,35 +92,28 @@ class TestOps(unittest.TestCase):
         assert t2.data.shape == (3,)
         assert np.allclose(t2.data, tt2.detach().numpy())
 
-import unittest
-import numpy as np
-import torch
 
-from phgrad.ops import LogSoftmax
-
+@requires_torch
 class TestLogSoftmax(unittest.TestCase):
-
     def test_forward_backward(self):
         """Test the forward pass with a simple input."""
-        input_np = np.array([[0.1, 0.2, 0.3],
-                             [0.4, 0.5, 0.6]])
+        import torch
+
+        input_np = np.array([[0.1, 0.2, 0.3], [0.4, 0.5, 0.6]])
         input_torch = torch.tensor(input_np, dtype=torch.float32, requires_grad=True)
 
         ctx = LogSoftmax()
-        # Your implementation
         log_softmax_np = LogSoftmax.forward(ctx, input_np, dim=1)
-
-        # PyTorch implementation
         log_softmax_torch = torch.nn.functional.log_softmax(input_torch, dim=1)
-        
-        # Check if the forward outputs are close
-        np.testing.assert_almost_equal(log_softmax_np, log_softmax_torch.detach().numpy(), decimal=5)
 
-        grad_output = torch.tensor([[1.0, 0.0, 0.0], 
-                                    [0.0, 1.0, 0.0]], dtype=torch.float32)
-        # Backward pass
+        np.testing.assert_almost_equal(
+            log_softmax_np, log_softmax_torch.detach().numpy(), decimal=5
+        )
+
+        grad_output = torch.tensor(
+            [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]], dtype=torch.float32
+        )
         log_softmax_torch.backward(grad_output)
         grad_np = LogSoftmax.backward(ctx, grad_output.numpy())
 
-        # Check if the gradients are close
         np.testing.assert_almost_equal(grad_np, input_torch.grad.numpy(), decimal=5)

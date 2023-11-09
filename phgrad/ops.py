@@ -47,7 +47,6 @@ class Function:
         else:
             op_function: "Function" = arg
             x = [self] + list(x)
-        tt = x[0]
 
         converted_x = []
         # TODO: We should not convert everything blindly to a tensor
@@ -62,9 +61,7 @@ class Function:
                 converted_x.append(arg)
             elif isinstance(arg, np.ndarray):
                 # TODO; We need to find a better way to check for dtypes and verification, for now we dont do it
-                converted_x.append(
-                    Tensor(np.array(arg), requires_grad=False)
-                )
+                converted_x.append(Tensor(np.array(arg), requires_grad=False))
                 # converted_x.append(
                 #     Tensor(np.array(arg, dtype=tt.dtype), requires_grad=False)
                 # )
@@ -374,6 +371,7 @@ class Log(Function):
         (input,) = ctx.forward_context
         return grad_output / input
 
+
 class LogSoftmax(Function):
     @staticmethod
     def forward(ctx, self: np.ndarray, dim: int = 0) -> np.ndarray:
@@ -385,8 +383,10 @@ class LogSoftmax(Function):
         x_max = self.max(axis=dim, keepdims=True)
         # TODO: Handle nan values
         shifted_logits = self - x_max
-        log_softmax_output = shifted_logits - np.log(np.sum(np.exp(shifted_logits), axis=dim, keepdims=True))
-        
+        log_softmax_output = shifted_logits - np.log(
+            np.sum(np.exp(shifted_logits), axis=dim, keepdims=True)
+        )
+
         return log_softmax_output
 
     @staticmethod
@@ -398,12 +398,17 @@ class LogSoftmax(Function):
         # Compute softmax
         x_max = input.max(axis=dim, keepdims=True)
         shifted_logits = input - x_max
-        softmax_output = np.exp(shifted_logits) / np.sum(np.exp(shifted_logits), axis=dim, keepdims=True)
+        softmax_output = np.exp(shifted_logits) / np.sum(
+            np.exp(shifted_logits), axis=dim, keepdims=True
+        )
 
         # Compute gradient
-        grad_input = grad_output - softmax_output * np.sum(grad_output, axis=dim, keepdims=True)
+        grad_input = grad_output - softmax_output * np.sum(
+            grad_output, axis=dim, keepdims=True
+        )
 
         return grad_input
+
 
 class Softmax(Function):
     @staticmethod
@@ -444,11 +449,11 @@ class Transpose(Function):
 
     @staticmethod
     def backward(ctx, x):
-        order = ctx.forward_context[0]
+        # order = ctx.forward_context[0]
         return np.transpose(x, tuple(np.argsort(ctx.order)))
 
-class Reshape(Function):
 
+class Reshape(Function):
     @staticmethod
     def forward(ctx, self: np.ndarray, shape: Tuple[int]) -> np.ndarray:
         ctx.save_forward_context(self.shape)
@@ -458,7 +463,6 @@ class Reshape(Function):
     def backward(ctx, grad_output: np.ndarray):
         input_shape = ctx.forward_context[0]
         return np.reshape(grad_output, input_shape)
-
 
 
 class Take(Function):
@@ -486,47 +490,6 @@ class Take(Function):
 
         return grad_input
 
-# class Take(Function):
-#     """Take function.
-#
-#     Function:
-#     f(x, y) = x.take(y)
-#     d/dx f(x, y) = 1
-#     d/dy f(x, y) = 1
-#     """
-#
-#     @staticmethod
-#     def forward(
-#         ctx: "Function", self: np.ndarray, tensor: np.ndarray, dim=None
-#     ) -> np.ndarray:
-#         """Take of a tensor."""
-#         ctx.save_forward_context(self, tensor)
-#         ctx.axis = dim
-#         return np.take(self, tensor, axis=ctx.axis)
-#
-#     @staticmethod
-#     def backward(ctx, grad_output: npt.NDArray):
-#         input, indices = ctx.forward_context
-#         axis = ctx.axis
-#
-#         grad_input = np.zeros_like(input, dtype=np.float32)
-#
-#         # Handle the case when dim is None
-#         if axis is None:
-#             # In this case, each index in 'indices' maps to a row in grad_input
-#             # We need to add the entire row of grad_output to each of these indices
-#             for idx, grad in zip(np.nditer(indices), grad_output):
-#                 grad_input[idx] += grad
-#         else:
-#             # Expand grad_output if necessary to match the dimensionality of input
-#             if grad_output.ndim < input.ndim:
-#                 shape_diff = input.ndim - grad_output.ndim
-#                 grad_output = np.expand_dims(grad_output, axis=(axis + 1,)*shape_diff)
-#
-#             # Place the gradients in the correct locations
-#             np.add.at(grad_input, (indices if axis == 0 else np.s_[:, indices]), grad_output)
-#
-#         return grad_input
 
 def register_tensor_op(name, op):
     register(name, op, Tensor)

@@ -1,15 +1,18 @@
+import gzip
+import hashlib
+import os
 import sys
 
-import requests, gzip, os, hashlib
 import numpy as np
-from tqdm import tqdm
+import requests
+import torch
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from phgrad.engine import Tensor
-from phgrad.nn import Linear 
 from phgrad.fun import argmax
 from phgrad.loss import nllloss
+from phgrad.nn import MLP, Linear
 from phgrad.optim import SGD
 
 
@@ -49,8 +52,9 @@ class Classifier:
     than torch.
 
     Loss also seem to spike a lot.
-    
+
     """
+
     def __init__(self) -> None:
         self.l1 = Linear(784, 64)
         self.l2 = Linear(64, 10)
@@ -60,11 +64,12 @@ class Classifier:
         x = x.relu()
         x = self.l2(x)
         return x.log_softmax(dim=1)
-    
+
     def parameters(self):
         return self.l1.parameters() + self.l2.parameters()
 
-import torch
+
+
 
 class TorchClassifier(torch.nn.Module):
     """A simple MLP classifier.
@@ -72,6 +77,7 @@ class TorchClassifier(torch.nn.Module):
     We getting with and without a bias term a accuracy of 93%.
 
     """
+
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
         self.l1 = torch.nn.Linear(784, 64, bias=True)
@@ -83,12 +89,11 @@ class TorchClassifier(torch.nn.Module):
         x = self.l2(x)
         return torch.nn.functional.log_softmax(x, dim=1)
 
-max_steps = 60000
 
-classifier = Classifier()
+classifier = MLP(784, 64, 10)
 torch_classifier = TorchClassifier()
 
-optimizer = SGD(list(classifier.parameters()), lr=0.01)
+optimizer = SGD(classifier.parameters(), lr=0.01)
 torch_optimizer = torch.optim.SGD(torch_classifier.parameters(), lr=0.01)
 
 total_correct = 0  # initialize total number of correct predictions
@@ -96,47 +101,22 @@ total_samples = 0
 
 TORCH = False
 
-pbar = tqdm(enumerate(zip(X_train, Y_train)), total=max_steps)
-for step, (sample, target) in pbar:
-
-    if TORCH:
-        torch_classifier.zero_grad()
-
-        torch_result = torch_classifier(torch.tensor(sample, dtype=torch.float32).unsqueeze(0))
-        loss = torch.nn.functional.nll_loss(torch_result, torch.tensor([np.argmax(target)]))
-
-        pred_idx = argmax(torch_result, dim=1)
-        target_idx = np.argmax(target, axis=0)
-        total_correct += int(pred_idx == target_idx)
-        loss.backward()
-        torch_optimizer.step()
-
-    else:
+for epoch in range(20):
+    for i in range(0, len(X_train), 32):
         optimizer.zero_grad()
 
-        sample = Tensor(np.float32(np.expand_dims(sample, 0)))
-        result = classifier(sample)
-        logits = result.softmax()
-        pred_idx = argmax(logits, dim=1)
-        target = target.tolist()
-        target = list(map(int, target))
-        target_idx = np.argmax(target, axis=0)
-        target_vec = Tensor(np.array([[target_idx]]), requires_grad=True)
-        loss = nllloss(result, target_vec)
+        x = Tensor(X_train[i : i + 32])
+        y = Tensor(np.argmax(Y_train[i : i + 32], axis=1))
+        y_pred = classifier(x)
+        y_pred = y_pred.log_softmax(dim=1)
+        loss = nllloss(y_pred, y, reduce="mean")
         loss.backward()
         optimizer.step()
-        total_correct += int(pred_idx == target_idx)
+        total_samples += 1
+        # pbar.set_description(f"Loss: {loss.data[0]:5.5f}, Accuracy: {accuracy:.2f}")
 
-    total_samples += 1
+    y_pred = classifier(Tensor(X_test))
+    y_pred = np.argmax(y_pred.data, axis=1)
 
-    if step == max_steps:
-        break
-
-    accuracy = total_correct / total_samples  # calculate overall accuracy
-    if TORCH:
-        pbar.set_description(f"Loss: {loss.data.item():5.5f}, Accuracy: {accuracy:.2f}")
-    else:
-        pbar.set_description(f"Loss: {loss.data[0]:5.5f}, Accuracy: {accuracy:.2f}")
-
-accuracy = total_correct / total_samples  # calculate overall accuracy
-print(f"Final accuracy: {accuracy}")
+    accuracy = (y_pred == Y_test.argmax(axis=1)).mean()
+    print(f"Epoch {epoch}: {loss.first_item:5.5f}, Accuracy: {accuracy:.2f}")

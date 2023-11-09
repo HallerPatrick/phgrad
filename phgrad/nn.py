@@ -1,10 +1,8 @@
-
-from typing import Any, List, Optional
-
-import numpy as np
+from typing import Any
 
 from .engine import Tensor
 from .init import he_initialization
+
 
 class Module:
     def __init__(self):
@@ -22,7 +20,7 @@ class Linear(Module):
         super().__init__()
         self.weights = Tensor(he_initialization((output_dim, inp_dim)))
         if bias:
-            self.biases = Tensor(he_initialization((output_dim, )))
+            self.biases = Tensor(he_initialization((output_dim,)))
         else:
             self.biases = None
 
@@ -40,7 +38,9 @@ class Linear(Module):
 class MLP(Module):
     """A simple Multi Layer Perceptron."""
 
-    def __init__(self, inp_dim: int, hidden_size: int, output_dim: int, bias: bool = True):
+    def __init__(
+        self, inp_dim: int, hidden_size: int, output_dim: int, bias: bool = True
+    ):
         super().__init__()
         self.l1 = Linear(inp_dim, hidden_size, bias=bias)
         self.l2 = Linear(hidden_size, output_dim, bias=bias)
@@ -53,6 +53,6 @@ class MLP(Module):
         t = self.l2(t)
         # print("PHGRAD: After l2", t.shape, t)
         return t
-    
+
     def parameters(self):
         return self.l1.parameters() + self.l2.parameters()
