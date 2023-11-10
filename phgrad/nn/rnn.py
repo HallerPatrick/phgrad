@@ -10,6 +10,8 @@ class RNN(Module):
     * Init hidden_state if None
     * Impl. other activation functions
     * Biderctional ?
+
+    Ref: https://pytorch.org/docs/stable/_modules/torch/nn/modules/rnn.html#RNN
     """
 
     def __init__(self, inp_dim: int, hidden_size: int, output_dim: int) -> None:
