@@ -48,6 +48,14 @@ class TestOps(unittest.TestCase):
         assert t2.data.shape == (3,)
         assert np.all(t2.data == np.array([1, 2, 0]))
 
+    def test_sigmoid(self):
+        t1 = Tensor(np.array([1, 2, -3]))
+        t2 = t1.sigmoid()
+        assert isinstance(t2, Tensor)
+        assert isinstance(t2.data, np.ndarray)
+        assert t2.data.shape == (3,)
+        assert np.allclose(t2.data, np.array([0.73105858, 0.88079708, 0.04742587]))
+
     @requires_torch
     def test_softmax(self):
         import torch
@@ -117,3 +125,17 @@ class TestLogSoftmax(unittest.TestCase):
         grad_np = LogSoftmax.backward(ctx, grad_output.numpy())
 
         np.testing.assert_almost_equal(grad_np, input_torch.grad.numpy(), decimal=5)
+
+class TestCat(unittest.TestCase):
+
+    def test_cat(self):
+        t1, t2 = Tensor(np.array([0.1, 0.2])), Tensor(np.array([0.3, 0.4]))
+        t3 = t1.cat((t2, ))
+        np.testing.assert_equal(t3.data, np.array([0.1, 0.2, 0.3, 0.4]))
+
+    def test_cat_dim1(self):
+        t1, t2 = Tensor(np.array([[0.1, 0.2], [0.3, 0.4]])), Tensor(np.array([[0.5, 0.6], [0.7, 0.8]]))
+        t3 = t1.cat((t2,), dim=1)
+        np.testing.assert_equal(t3.data, np.array([[0.1, 0.2, 0.5, 0.6], [0.3, 0.4, 0.7, 0.8]]))
+
+

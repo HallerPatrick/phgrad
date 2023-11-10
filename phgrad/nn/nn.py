@@ -1,8 +1,7 @@
+from phgrad.engine import Tensor
+from phgrad.init import he_initialization
 
-from .engine import Tensor
-from .init import he_initialization
 from .base import Module
-
 
 class Linear(Module):
     def __init__(self, inp_dim: int, output_dim: int, bias: bool = True):

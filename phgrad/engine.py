@@ -152,4 +152,5 @@ class Tensor:
 
 
 # We do it like Georg Hotz and build the tensors ops and at them dinamically
+from . import ops
 # from .utils import generate_stub_for_class; generate_stub_for_class(Tensor, "engine")

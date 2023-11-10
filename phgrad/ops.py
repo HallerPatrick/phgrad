@@ -437,6 +437,21 @@ class ReLU(Function):
         (input,) = ctx.forward_context
         return grad_output * (input > 0)
 
+class Sigmoid(Function):
+
+    @staticmethod
+    def forward(ctx, self: np.ndarray) -> np.ndarray:
+        """Sigmoid of a tensor."""
+        ctx.save_forward_context(self)
+        result =  1 / (1 + np.exp(-self))
+        ctx.result = result
+        return result
+
+    @staticmethod
+    def backward(ctx, grad_output: npt.NDArray):
+        result = ctx.result
+        return grad_output  * result * (1 - result)
+
 
 class Transpose(Function):
     @staticmethod
@@ -459,6 +474,17 @@ class Reshape(Function):
         ctx.save_forward_context(self.shape)
         return np.reshape(self, shape)
 
+    @staticmethod
+    def backward(ctx, grad_output: np.ndarray):
+        input_shape = ctx.forward_context[0]
+        return np.reshape(grad_output, input_shape)
+
+class Flatten(Function):
+
+    @staticmethod
+    def forward(ctx, self: np.ndarray) -> np.ndarray:
+        ctx.save_forward_context(self.shape)
+        return np.reshape(self, (self.shape[0], -1))
     @staticmethod
     def backward(ctx, grad_output: np.ndarray):
         input_shape = ctx.forward_context[0]
@@ -490,6 +516,49 @@ class Take(Function):
 
         return grad_input
 
+class Dropout(Function):
+
+    @staticmethod
+    def forward(ctx, self: np.ndarray, p: float, training: bool) -> np.ndarray:
+        """Dropout function."""
+        ctx.save_forward_context(p, training)
+        if training:
+            mask = np.random.binomial(1, p, size=self.shape)
+        else:
+            mask = None
+
+        ctx.mask = mask
+        
+        if training:
+            return self * mask
+        else:
+            return self
+
+    @staticmethod
+    def backward(ctx, grad_output: np.ndarray):
+        _, training = ctx.forward_context
+
+        if training:
+            return grad_output * ctx.mask
+        else:
+            return grad_output
+
+class Cat(Function):
+
+    @staticmethod
+    def forward(ctx, self: np.ndarray, tensors: Tuple[Tensor], dim: int = 0):
+        assert isinstance(tensors, tuple), "Tensors must be a tuple"
+        ctx.save_forward_context(self, tensors)
+        all_tensors = [self, *tensors]
+        ctx.shapes = [t.shape for t in all_tensors]
+        ctx.axis = dim
+        return np.concatenate([t.data for t in all_tensors], axis=dim)
+
+    @staticmethod
+    def backward(ctx, grad_output: np.ndarray):
+        grads = np.split(grad_output, np.cumsum(self.shapes)[:-1], axis=ctx.axis)
+        return tuple(grads)
+
 
 def register_tensor_op(name, op):
     register(name, op, Tensor)
@@ -498,6 +567,7 @@ def register_tensor_op(name, op):
 # register("pow", Pow)
 register_tensor_op("add", Add)
 register_tensor_op("sum", Sum)
+register_tensor_op("neg", Neg)
 register_tensor_op("mean", Mean)
 register_tensor_op("max", Max)
 register_tensor_op("mul", Mul)
@@ -511,9 +581,12 @@ register_tensor_op("log", Log)
 register_tensor_op("log_softmax", LogSoftmax)
 register_tensor_op("softmax", Softmax)
 register_tensor_op("relu", ReLU)
-register_tensor_op("neg", Neg)
+register_tensor_op("sigmoid", Sigmoid)
 
-
+register_tensor_op("dropout", Dropout)
 register_tensor_op("take", Take)
 register_tensor_op("transpose", Transpose)
 register_tensor_op("reshape", Reshape)
+register_tensor_op("flatten", Flatten)
+register_tensor_op("cat", Cat)
+

@@ -1,20 +1,49 @@
 import unittest
 
 import numpy as np
-import torch
 
-torch.manual_seed(69)
+from utils import requires_torch
 
-from torch.nn import Linear as TorchLinear
-
-
-from phgrad.nn import Linear, MLP
 from phgrad.engine import Tensor
+from phgrad.nn import Linear, MLP, Dropout, Module, Embedding
 from phgrad.optim import SGD
 
 
+class TestModule(unittest.TestCase):
+
+    def test_parameters(self):
+
+        class SomeModule(Module):
+            def __init__(self, bias=False):
+                super().__init__()
+                self.l1 = Linear(1, 2, bias=bias)
+                self.l2 = Linear(2, 1, bias=bias)
+
+        m = SomeModule()
+        self.assertEqual(len(m.parameters()), 2)
+
+        m = SomeModule(bias=True)
+        self.assertEqual(len(m.parameters()), 4)
+
+        class SomeModule2(Module):
+            def __init__(self, bias=False):
+                super().__init__()
+                self.l1 = Linear(1, 2, bias=bias)
+                self.submodule = SomeModule(bias=bias)
+
+        m = SomeModule2()
+        self.assertEqual(len(m.parameters()), 3)
+
+        m = SomeModule2(bias=True)
+        self.assertEqual(len(m.parameters()), 6)
+
+
+@requires_torch
 class TestLinearLayer(unittest.TestCase):
     def test_linear_layer(self):
+
+        import torch
+        from torch.nn import Linear as TorchLinear
         tlinear = TorchLinear(2, 1, bias=False)
 
         result = tlinear(torch.tensor([[1, 2]], dtype=torch.float32))
@@ -32,6 +61,8 @@ class TestLinearLayer(unittest.TestCase):
         np.testing.assert_allclose(tlinear.weight.grad, linear.weights.grad)
 
     def test_linear_layer_bias(self):
+        import torch
+        from torch.nn import Linear as TorchLinear
         tlinear = TorchLinear(2, 1, bias=True)
 
         result = tlinear(torch.tensor([[1, 2]], dtype=torch.float32))
@@ -51,6 +82,8 @@ class TestLinearLayer(unittest.TestCase):
         np.testing.assert_allclose(tlinear.bias.grad, linear.biases.grad)
 
     def test_mlp(self):
+
+        import torch
         class TorchMLP(torch.nn.Module):
             def __init__(self, *args, **kwargs) -> None:
                 super().__init__(*args, **kwargs)
@@ -101,6 +134,7 @@ class TestLinearLayer(unittest.TestCase):
             )
 
     def test_classifier(self):
+        import torch
         class TorchClassifier(torch.nn.Module):
             def __init__(self, *args, **kwargs) -> None:
                 super().__init__(*args, **kwargs)
@@ -112,7 +146,6 @@ class TestLinearLayer(unittest.TestCase):
                 x = torch.relu(x)
                 x = self.l2(x)
                 return x
-                # return torch.nn.functional.log_softmax(x, dim=1)
 
         torch_classifier = TorchClassifier()
         classifier = MLP(784, 10, 10, bias=False)
@@ -156,6 +189,7 @@ class TestLinearLayer(unittest.TestCase):
             )
 
     def test_classifier_sparse_input(self):
+        import torch
         class TorchClassifier(torch.nn.Module):
             def __init__(self, *args, **kwargs) -> None:
                 super().__init__(*args, **kwargs)
@@ -211,3 +245,30 @@ class TestLinearLayer(unittest.TestCase):
             np.testing.assert_allclose(
                 torch_classifier.l2.weight.detach().numpy(), classifier.l2.weights.data
             )
+
+class TestDropout(unittest.TestCase):
+
+    def test_dropout(self):
+        dropout = Dropout(0.4)
+        for _ in range(10):
+            input = np.random.randn(100, 100)
+            result = dropout(Tensor(input))
+            self.assertLessEqual(np.count_nonzero(result.data), 5000)
+
+    def test_dropout_eval(self):
+        dropout = Dropout(0.4)
+        dropout.eval()
+        input = np.random.randn(100, 100)
+        result = dropout(Tensor(input))
+        np.testing.assert_allclose(result.data, input)
+
+
+class TestEmbedding(unittest.TestCase):
+
+    def test_embedding(self):
+        embedding = Embedding(10, 5)
+        for _ in range(10):
+            input = np.random.randint(0, 10, size=(100,))
+            result = embedding(Tensor(input))
+            self.assertEqual(result.data.shape, (100, 5))
+

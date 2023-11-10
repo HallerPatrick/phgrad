@@ -40,6 +40,7 @@ class TestMNIST(unittest.TestCase):
             y_pred = np.argmax(y_pred.data, axis=1)
 
             accuracy = (y_pred == self.Y_test.argmax(axis=1)).mean()
+            print(f"Epoch {epoch}: {accuracy:.2f}")
 
             # Stupid test, but good for regression
             self.assertGreater(accuracy, current_accuracy)
