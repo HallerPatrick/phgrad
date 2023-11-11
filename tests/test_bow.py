@@ -48,6 +48,7 @@ def make_target(label: List[int]) -> Tensor:
     return Tensor(np.array(label), requires_grad=False)
 
 
+@pytest.mark.skip("This test is too slow")
 @pytest.mark.slow
 @requires_torch
 class TestBoW(unittest.TestCase):

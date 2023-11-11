@@ -556,7 +556,7 @@ class Cat(Function):
 
     @staticmethod
     def backward(ctx, grad_output: np.ndarray):
-        grads = np.split(grad_output, np.cumsum(self.shapes)[:-1], axis=ctx.axis)
+        grads = np.split(grad_output, np.cumsum(ctx.shapes)[:-1], axis=ctx.axis)
         return tuple(grads)
 
 

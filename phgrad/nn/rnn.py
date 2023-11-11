@@ -21,7 +21,7 @@ class RNN(Module):
 
     def forward(self, inp: Tensor, hidden_state: Tensor):
         comb = inp.cat((hidden_state,), 1)
-        hidden = self.in2hidden(combined)
+        hidden = self.in2hidden(comb)
         # NOTE: Is sigmoid the right activation function to use here? Torch uses Tanh or ReLu
         hidden = hidden.sigmoid()
         output = self.in2out(comb)
