@@ -10,80 +10,66 @@ The forward pass is called when the operation is applied to a tensor.
 The backward pass is called when the gradient is computed.
 
 All functions operate with numpy arrays. Therefore all function signatures
-and return types are defined as numpy arrays. We wrap the function calls 
-in a Tensor object, which also stores the gradient and the operation that
-created the tensor.
-
-For typing we generate a stub file on the fly, which is used by the type
-checker to check the types of the functions. The stub files then contain
-the signature with the tensor type instead of the numpy array type.
+and return types are defined as numpy arrays. 
 """
 
-from typing import List, Tuple, Optional
+from typing import Any, List, Tuple, Optional, Type, Union
 
 from functools import partial
 
 import numpy.typing as npt
 import numpy as np
 
-from ..engine import Tensor
+BackendTensor = np.ndarray
 
-class Function:
+def init_data(data: Any):
+    if isinstance(data, np.ndarray):
+        return data
+    try:
+        data = np.array(data)
+    except Exception as error:
+        raise ValueError(f"Cannot convert {type(data)} to CPU tensor (numpy). {error}")
+    
+    return data
+
+
+class CPUFunction:
     """Our CPU backend. Mostly based on numpy"""
 
     __slots__ = ("prev", "forward_context")
 
-    def __init__(self, *tensors: Tuple[npt.NDArray]) -> None:
+    differentiable = True
+
+    def __init__(self, *tensors: Tuple[npt.NDArray]):
         self.prev = tensors
         self.forward_context: List[Tuple[npt.NDArray]] = []
 
-    def save_forward_context(self, *tensors: Tuple[npt.NDArray]) -> None:
+    def save_forward_context(self, *tensors: Tuple[npt.NDArray]):
         return self.forward_context.extend(tensors)
     
     @staticmethod
-    def apply(self, arg, *x, **kwargs):
+    def apply(self_, arg, *x, **kwargs):
 
-        if isinstance(arg, Tensor):
-            op_function: "Function" = self
-            x = [arg] + list(x)
+        # We need to check for the type of the first argument
+        if isinstance(arg, CPUFunction):
+            op_function: "CPUFunction" = arg
+            x = [self_] + list(x)
         else:
-            op_function: "Function" = arg
-            x = [self] + list(x)
+            op_function: "CPUFunction" = self_
+            x = [arg] + list(x)
 
-        converted_x = []
-        # TODO: We should not convert everything blindly to a tensor
-        # For now only convert numpy arrays
-        for arg in x:
-            if isinstance(arg, Tensor):
-                # TODO: check dtype, and what types can be used in combination
-                # if arg.dtype != tt.dtype:
-                #     raise TypeError(
-                #         f"Cannot apply {op} to tensors of different dtypes: {tt.dtype} and {arg.dtype}"
-                #     )
-                converted_x.append(arg)
-            elif isinstance(arg, np.ndarray):
-                # TODO; We need to find a better way to check for dtypes and verification, for now we dont do it
-                converted_x.append(Tensor(np.array(arg), requires_grad=False))
-                # converted_x.append(
-                #     Tensor(np.array(arg, dtype=tt.dtype), requires_grad=False)
-                # )
-            else:
-                converted_x.append(arg)
-
-        ctx = op_function(*converted_x)
+        ctx = op_function(*x)
 
         # Why are we even converting to a tensor in the first place?
         passing_args = []
-        for t in converted_x:
-            if isinstance(t, Tensor):
+        for t in x:
+            if hasattr(t, "data"):
                 passing_args.append(t.data)
             else:
                 passing_args.append(t)
         
-        ret = Tensor(op_function.forward(ctx, *passing_args, **kwargs))
-        if ret.requires_grad:
-            ret.ctx = ctx
-        return ret
+        ret = op_function.forward(ctx, *passing_args, **kwargs) # type: ignore
+        return ret, ctx, ctx.differentiable
 
     def __str__(self) -> str:
         return f"<op.{self.__class__.__name__}>"
@@ -131,7 +117,7 @@ def unbroadcast(grad, original_shape):
     return grad
 
 
-class Add(Function):
+class Add(CPUFunction):
     """Addition function.
 
     Function:
@@ -152,7 +138,7 @@ class Add(Function):
         return unbroadcast(grad_output, x.shape), unbroadcast(grad_output, y.shape)
 
 
-class Mul(Function):
+class Mul(CPUFunction):
     """Multiplication function.
 
     Function:
@@ -175,7 +161,7 @@ class Mul(Function):
         )
 
 
-class Sub(Function):
+class Sub(CPUFunction):
     """Subtraction function.
 
     Function:
@@ -196,7 +182,7 @@ class Sub(Function):
         return unbroadcast(grad_output, x.shape), unbroadcast(-grad_output, y.shape)
 
 
-class Div(Function):
+class Div(CPUFunction):
     """Division function.
 
     Function:
@@ -239,7 +225,7 @@ class Div(Function):
 #         )
 
 
-class Exp(Function):
+class Exp(CPUFunction):
     @staticmethod
     def forward(ctx, self: np.ndarray) -> np.ndarray:
         """Exponential of a tensor."""
@@ -253,7 +239,7 @@ class Exp(Function):
         return grad_output * input
 
 
-class Sum(Function):
+class Sum(CPUFunction):
     """Sum function.
 
     Function:
@@ -274,7 +260,7 @@ class Sum(Function):
         return grad_output * np.ones_like(input_tensor)
 
 
-class Neg(Function):
+class Neg(CPUFunction):
     @staticmethod
     def forward(ctx, self: np.ndarray) -> np.ndarray:
         """Negation of a tensor."""
@@ -286,7 +272,7 @@ class Neg(Function):
         return -grad_output
 
 
-class Mean(Function):
+class Mean(CPUFunction):
     """Mean function.
 
     Function:
@@ -321,7 +307,7 @@ class Mean(Function):
         return grad_output * np.ones_like(input_tensor) / len(input_tensor)
 
 
-class Max(Function):
+class Max(CPUFunction):
     """Max function.
 
     Function:
@@ -342,7 +328,7 @@ class Max(Function):
         return grad_output * np.ones_like(input_tensor)
 
 
-class MatMul(Function):
+class MatMul(CPUFunction):
     @staticmethod
     def forward(ctx, self: np.ndarray, tensor: np.ndarray) -> np.ndarray:
         """Matrix multiplication of two tensors."""
@@ -358,7 +344,7 @@ class MatMul(Function):
         return grad_input, grad_weight
 
 
-class Log(Function):
+class Log(CPUFunction):
     @staticmethod
     def forward(ctx, self: np.ndarray) -> np.ndarray:
         """Log of a tensor."""
@@ -371,7 +357,7 @@ class Log(Function):
         return grad_output / input
 
 
-class LogSoftmax(Function):
+class LogSoftmax(CPUFunction):
     @staticmethod
     def forward(ctx, self: np.ndarray, dim: int = 0) -> np.ndarray:
         """Log softmax of a tensor."""
@@ -409,7 +395,7 @@ class LogSoftmax(Function):
         return grad_input
 
 
-class Softmax(Function):
+class Softmax(CPUFunction):
     @staticmethod
     def forward(ctx, self: np.ndarray, dim: int = 0) -> np.ndarray:
         """Softmax of a tensor."""
@@ -424,7 +410,7 @@ class Softmax(Function):
         return grad_output * np.exp(input) * (1 - np.exp(input).sum(axis=dim))
 
 
-class ReLU(Function):
+class ReLU(CPUFunction):
     @staticmethod
     def forward(ctx, self: np.ndarray) -> np.ndarray:
         """ReLU of a tensor."""
@@ -436,7 +422,7 @@ class ReLU(Function):
         (input,) = ctx.forward_context
         return grad_output * (input > 0)
 
-class Sigmoid(Function):
+class Sigmoid(CPUFunction):
 
     @staticmethod
     def forward(ctx, self: np.ndarray) -> np.ndarray:
@@ -452,7 +438,7 @@ class Sigmoid(Function):
         return grad_output  * result * (1 - result)
 
 
-class Transpose(Function):
+class Transpose(CPUFunction):
     @staticmethod
     def forward(ctx, self: np.ndarray, order) -> np.ndarray:
         ctx.save_forward_context(order)
@@ -464,9 +450,9 @@ class Transpose(Function):
         return np.transpose(x, tuple(np.argsort(ctx.order)))
 
 
-class Reshape(Function):
+class Reshape(CPUFunction):
     @staticmethod
-    def forward(ctx, self: np.ndarray, shape: Tuple[int]) -> np.ndarray:
+    def forward(ctx, self: np.ndarray, shape: Union[int, Tuple[int]]) -> np.ndarray:
         ctx.save_forward_context(self.shape)
         return np.reshape(self, shape)
 
@@ -475,7 +461,7 @@ class Reshape(Function):
         input_shape = ctx.forward_context[0]
         return np.reshape(grad_output, input_shape)
 
-class Flatten(Function):
+class Flatten(CPUFunction):
 
     @staticmethod
     def forward(ctx, self: np.ndarray) -> np.ndarray:
@@ -488,11 +474,10 @@ class Flatten(Function):
         return np.reshape(grad_output, input_shape)
 
 
-class Take(Function):
+class Take(CPUFunction):
     """Take function without a dimension parameter.
 
     NOTE: The current implementation only works with flat indices
-
     """
 
     @staticmethod
@@ -507,13 +492,17 @@ class Take(Function):
         input, indices = ctx.forward_context
         grad_input = np.zeros_like(input, dtype=np.float32)
 
+        # TODO: Should we be concerned if indices is a memoryview?
+        if isinstance(indices, memoryview):
+            indices = indices.tolist()
+
         # Iterate over each index and add the corresponding gradient
         for idx, grad in zip(indices, grad_output):
             grad_input[idx] += grad
 
         return grad_input
 
-class Dropout(Function):
+class Dropout(CPUFunction):
 
     @staticmethod
     def forward(ctx, self: np.ndarray, p: float, training: bool) -> np.ndarray:
@@ -540,24 +529,78 @@ class Dropout(Function):
         else:
             return grad_output
 
-class Cat(Function):
+class Cat(CPUFunction):
 
     @staticmethod
-    def forward(ctx, self: np.ndarray, tensors: Tuple[Tensor], dim: int = 0):
+    def forward(ctx, self: np.ndarray, tensors: Tuple[np.ndarray], dim: int = 0):
         assert isinstance(tensors, tuple), "Tensors must be a tuple"
         ctx.save_forward_context(self, tensors)
         all_tensors = [self, *tensors]
         ctx.shapes = [t.shape for t in all_tensors]
+        ctx.axis = dim
         return np.concatenate([t.data for t in all_tensors], axis=ctx.axis)
 
     @staticmethod
     def backward(ctx, grad_output: np.ndarray):
         grads = np.split(grad_output, np.cumsum(ctx.shapes)[:-1], axis=ctx.axis)
         return tuple(grads)
+    
+class ArgMax(CPUFunction):
 
+    differentiable = False
 
-def attach_op(function: Function):
+    @staticmethod
+    def forward(ctx, self: np.ndarray, dim: int = 0) -> np.ndarray:
+        return np.argmax(self, axis=dim)
+
+    @staticmethod
+    def backward(ctx, grad_output: np.ndarray):
+        raise RuntimeError("ArgMax is not differentiable")
+
+# Factories
+def eye(n: int, m: Optional[int] = None) -> np.ndarray:
+    """Create an identity matrix.
+
+    Args:
+        n (int): The number of rows.
+        m (int): The number of columns.
+        requires_grad (bool, optional): Whether the tensor requires a gradient. Defaults to False.
+
+    Returns:
+        Tensor: The identity matrix.
+    """
+    return np.eye(n, m)
+
+def ones(shape: Tuple[int]) -> np.ndarray:
+    """Create a tensor of ones.
+
+    Args:
+        shape (Tuple[int]): The shape of the tensor.
+        requires_grad (bool, optional): Whether the tensor requires a gradient. Defaults to False.
+
+    Returns:
+        Tensor: The tensor of ones.
+    """
+    return np.ones(shape)
+
+def zeros(shape: Tuple[int]) -> np.ndarray:
+    """Create a tensor of zeros.
+
+    Args:
+        shape (Tuple[int]): The shape of the tensor.
+        requires_grad (bool, optional): Whether the tensor requires a gradient. Defaults to False.
+
+    Returns:
+        Tensor: The tensor of zeros.
+    """
+    return np.zeros(shape)
+
+def attach_op(function: Type[CPUFunction]):
     return partial(function.apply, function)
+
+funcs = {
+    "init_data": init_data,
+}
 
 ops_map = {
     "add": attach_op(Add),
@@ -580,6 +623,14 @@ ops_map = {
     "transpose": attach_op(Transpose),
     "reshape": attach_op(Reshape),
     "flatten": attach_op(Flatten),
-    "cat": attach_op(Cat)
+    "cat": attach_op(Cat),
+
+    "argmax": attach_op(ArgMax),
+}
+
+factories = {
+    "eye": eye,
+    "ones": ones,
+    "zeros": zeros,
 }
 

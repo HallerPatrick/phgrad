@@ -8,7 +8,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from phgrad.engine import Tensor
 from phgrad.nn import MLP
-from phgrad.optim import SGD
+from phgrad.optim import SGD, Adam
 from phgrad.loss import nllloss
 from tests.utils import load_mnist
 
@@ -22,7 +22,8 @@ class MNIST():
 
     def run(self):
         mlp = MLP(784, 64, 10, bias=False)
-        optimizer = SGD(mlp.parameters(), lr=0.005)
+        # optimizer = SGD(mlp.parameters(), lr=0.005)
+        optimizer = Adam(mlp.parameters())
 
         losses = []
         accuracies = []
@@ -52,22 +53,22 @@ class MNIST():
         end_time = time.time()
         print(f"Training time: {end_time - start_time:.2f} seconds")
 
-        plt.figure(figsize=(12, 5))
-        plt.subplot(1, 2, 1)
-        plt.plot(losses, label='Loss')
-        plt.title('Training Loss')
-        plt.xlabel('Step')
-        plt.ylabel('Loss')
-        plt.legend()
-
-        plt.subplot(1, 2, 2)
-        plt.plot(accuracies, label='Accuracy')
-        plt.title('Training Accuracy')
-        plt.xlabel('Epoch')
-        plt.ylabel('Accuracy')
-        plt.legend()
-
-        plt.show()
+        # plt.figure(figsize=(12, 5))
+        # plt.subplot(1, 2, 1)
+        # plt.plot(losses, label='Loss')
+        # plt.title('Training Loss')
+        # plt.xlabel('Step')
+        # plt.ylabel('Loss')
+        # plt.legend()
+        #
+        # plt.subplot(1, 2, 2)
+        # plt.plot(accuracies, label='Accuracy')
+        # plt.title('Training Accuracy')
+        # plt.xlabel('Epoch')
+        # plt.ylabel('Accuracy')
+        # plt.legend()
+        #
+        # plt.show()
 
 
 if __name__ == "__main__":

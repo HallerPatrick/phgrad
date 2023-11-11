@@ -1,3 +1,5 @@
+from typing import Optional
+
 from phgrad.engine import Tensor
 from phgrad.init import he_initialization
 
@@ -7,10 +9,11 @@ class Linear(Module):
     def __init__(self, inp_dim: int, output_dim: int, bias: bool = True):
         super().__init__()
         self.weights = Tensor(he_initialization((output_dim, inp_dim)))
+
+        self.biases: Optional[Tensor] = None
+
         if bias:
             self.biases = Tensor(he_initialization((output_dim,)))
-        else:
-            self.biases = None
 
     def forward(self, t: Tensor) -> Tensor:
         if self.biases is None:
