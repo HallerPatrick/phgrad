@@ -5,7 +5,7 @@ import numpy as np
 from utils import requires_torch
 
 from phgrad.engine import Tensor as Tensor
-from phgrad.ops import unbroadcast, LogSoftmax
+from phgrad.ops import LogSoftmax
 
 
 class TestReshape(unittest.TestCase):
@@ -74,6 +74,7 @@ class TestOps(unittest.TestCase):
     @requires_torch
     @unittest.skip("Not implemented")
     def test_softmax_with_axis(self):
+        import torch
         t1 = Tensor(np.array([[1, 2, -3], [4, 5, 6]]))
         t2 = t1.softmax()
 

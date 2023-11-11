@@ -51,7 +51,6 @@ class TestMNIST(unittest.TestCase):
     def test_mlp_torch(self):
         import torch
         from torch import tensor
-        from torch.nn import NLLLoss
 
         torch_mlp = torch.nn.Sequential(
             torch.nn.Linear(784, 64, bias=False),

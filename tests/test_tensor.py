@@ -1,6 +1,5 @@
 import unittest
 import numpy as np
-import torch
 
 from phgrad.engine import Tensor as Tensor
 

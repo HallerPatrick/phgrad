@@ -1,6 +1,5 @@
 from typing import *
 from numpy import ndarray
-import numpy.typing as npt
 import typing
 import phgrad
 

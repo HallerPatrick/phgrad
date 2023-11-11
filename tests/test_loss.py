@@ -66,7 +66,6 @@ class TestLoss(unittest.TestCase):
     def test_torch_nllloss(self):
         from torch import tensor
         from torch.nn import NLLLoss
-        import torch.nn.functional as F
 
         torch_nllloss = NLLLoss()
 
