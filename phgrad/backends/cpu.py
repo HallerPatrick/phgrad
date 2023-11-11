@@ -21,14 +21,16 @@ the signature with the tensor type instead of the numpy array type.
 
 from typing import List, Tuple, Optional
 
+from functools import partial
+
 import numpy.typing as npt
 import numpy as np
 
-from .engine import Tensor
-from .utils import register
-
+from ..engine import Tensor
 
 class Function:
+    """Our CPU backend. Mostly based on numpy"""
+
     __slots__ = ("prev", "forward_context")
 
     def __init__(self, *tensors: Tuple[npt.NDArray]) -> None:
@@ -37,9 +39,9 @@ class Function:
 
     def save_forward_context(self, *tensors: Tuple[npt.NDArray]) -> None:
         return self.forward_context.extend(tensors)
-
+    
+    @staticmethod
     def apply(self, arg, *x, **kwargs):
-        # support the args in both orders
 
         if isinstance(arg, Tensor):
             op_function: "Function" = self
@@ -77,7 +79,7 @@ class Function:
                 passing_args.append(t.data)
             else:
                 passing_args.append(t)
-
+        
         ret = Tensor(op_function.forward(ctx, *passing_args, **kwargs))
         if ret.requires_grad:
             ret.ctx = ctx
@@ -356,9 +358,6 @@ class MatMul(Function):
         return grad_input, grad_weight
 
 
-Dot = MatMul
-
-
 class Log(Function):
     @staticmethod
     def forward(ctx, self: np.ndarray) -> np.ndarray:
@@ -457,14 +456,11 @@ class Transpose(Function):
     @staticmethod
     def forward(ctx, self: np.ndarray, order) -> np.ndarray:
         ctx.save_forward_context(order)
-        # TODO: Not sure how to handle this
         ctx.order = order
-        # Float to int
         return np.transpose(self, order)
 
     @staticmethod
     def backward(ctx, x):
-        # order = ctx.forward_context[0]
         return np.transpose(x, tuple(np.argsort(ctx.order)))
 
 
@@ -485,6 +481,7 @@ class Flatten(Function):
     def forward(ctx, self: np.ndarray) -> np.ndarray:
         ctx.save_forward_context(self.shape)
         return np.reshape(self, (self.shape[0], -1))
+
     @staticmethod
     def backward(ctx, grad_output: np.ndarray):
         input_shape = ctx.forward_context[0]
@@ -551,8 +548,7 @@ class Cat(Function):
         ctx.save_forward_context(self, tensors)
         all_tensors = [self, *tensors]
         ctx.shapes = [t.shape for t in all_tensors]
-        ctx.axis = dim
-        return np.concatenate([t.data for t in all_tensors], axis=dim)
+        return np.concatenate([t.data for t in all_tensors], axis=ctx.axis)
 
     @staticmethod
     def backward(ctx, grad_output: np.ndarray):
@@ -560,33 +556,30 @@ class Cat(Function):
         return tuple(grads)
 
 
-def register_tensor_op(name, op):
-    register(name, op, Tensor)
+def attach_op(function: Function):
+    return partial(function.apply, function)
 
-
-# register("pow", Pow)
-register_tensor_op("add", Add)
-register_tensor_op("sum", Sum)
-register_tensor_op("neg", Neg)
-register_tensor_op("mean", Mean)
-register_tensor_op("max", Max)
-register_tensor_op("mul", Mul)
-register_tensor_op("sub", Sub)
-register_tensor_op("div", Div)
-register_tensor_op("dot", Dot)
-register_tensor_op("matmul", MatMul)
-register_tensor_op("exp", Exp)
-
-register_tensor_op("log", Log)
-register_tensor_op("log_softmax", LogSoftmax)
-register_tensor_op("softmax", Softmax)
-register_tensor_op("relu", ReLU)
-register_tensor_op("sigmoid", Sigmoid)
-
-register_tensor_op("dropout", Dropout)
-register_tensor_op("take", Take)
-register_tensor_op("transpose", Transpose)
-register_tensor_op("reshape", Reshape)
-register_tensor_op("flatten", Flatten)
-register_tensor_op("cat", Cat)
+ops_map = {
+    "add": attach_op(Add),
+    "sum": attach_op(Sum),
+    "neg": attach_op(Neg),
+    "mean": attach_op(Mean),
+    "max": attach_op(Max),
+    "mul": attach_op(Mul),
+    "sub": attach_op(Sub),
+    "div": attach_op(Div),
+    "matmul": attach_op(MatMul),
+    "exp": attach_op(Exp),
+    "log": attach_op(Log),
+    "log_softmax": attach_op(LogSoftmax),
+    "softmax": attach_op(Softmax),
+    "relu": attach_op(ReLU),
+    "sigmoid": attach_op(Sigmoid),
+    "dropout": attach_op(Dropout),
+    "take": attach_op(Take),
+    "transpose": attach_op(Transpose),
+    "reshape": attach_op(Reshape),
+    "flatten": attach_op(Flatten),
+    "cat": attach_op(Cat)
+}
 

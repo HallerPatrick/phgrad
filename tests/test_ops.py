@@ -5,7 +5,7 @@ import numpy as np
 from utils import requires_torch
 
 from phgrad.engine import Tensor as Tensor
-from phgrad.ops import LogSoftmax
+from phgrad.backends.cpu import LogSoftmax
 
 
 class TestReshape(unittest.TestCase):

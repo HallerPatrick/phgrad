@@ -4,10 +4,18 @@ import numpy as np
 import numpy.typing as npt
 
 
-class Tensor:
-    __slots__ = ("data", "grad", "requires_grad", "ctx")
 
-    def __init__(self, value: npt.NDArray, requires_grad=True):
+class Tensor:
+    __slots__ = ("data", "grad", "requires_grad", "ctx", "backend")
+
+    def __init__(self, value: npt.NDArray, requires_grad=True, device: Union[str, int] = "cpu"):
+        
+        # TODO: How do we avoid circular imports of Tensor
+        from phgrad.backends import backend_from_device
+        self.backend = backend_from_device(device)
+
+        # We could provide subclass for every backend
+
         if type(value) in [np.float64, np.float32, np.float16, np.float128, np.int64]:
             value = np.array(value)
 
@@ -38,20 +46,6 @@ class Tensor:
     def dtype(self):
         """Return the dtype of the tensor."""
         return self.data.dtype
-
-    def deepwalk(self):
-        def _deepwalk(node, visited, nodes):
-            visited.add(node)
-            if node.ctx:
-                [
-                    _deepwalk(i, visited, nodes)
-                    for i in node.ctx.prev
-                    if i not in visited
-                ]
-                nodes.append(node)
-            return nodes
-
-        return _deepwalk(self, set(), [])
 
     def backward(self, allow_fill=True):
         """Compute the gradient of this tensor.
@@ -107,6 +101,95 @@ class Tensor:
     def __repr__(self) -> str:
         return self.__str__()
 
+    # === Some fine utils ===
+    @property
+    def first_item(self):
+        return self.data[0]
+
+    def torch(self, requires_grad: bool = False):
+        try:
+            import torch
+        except ImportError:
+            raise ImportError("torch not installed (pip install torch)")
+
+        torch_tensor = torch.from_numpy(self.data)
+        torch_tensor.requires_grad = requires_grad
+        return torch_tensor
+    
+    # ========= OPS =========
+
+    # Unary ops
+    def exp(self):
+        return self.backend.exp(self)
+
+    def neg(self):
+        return self.backend.neg(self)
+
+    def log(self):
+        return self.backend.log(self)
+
+    def log_softmax(self, dim: Optional[int] = None):
+        return self.backend.log_softmax(self, dim)
+
+    def softmax(self, dim: Optional[int] = None):
+        return self.backend.softmax(self, dim)
+
+    def relu(self):
+        return self.backend.relu(self)
+
+    def sigmoid(self):
+        return self.backend.sigmoid(self)
+
+    # Unary ops + reduce
+    def sum(self):
+        return self.backend.sum(self)
+    
+    def mean(self):
+        return self.backend.mean(self)
+
+    def max(self):
+        return self.backend.max(self)
+
+    # Binary ops
+    def add(self, other: "Tensor"):
+        return self.backend.add(self, other)
+
+    def sub(self, other: "Tensor"):
+        return self.backend.sub(self, other)
+
+    def mul(self, other: "Tensor"):
+        return self.backend.mul(self, other)
+
+    def div(self, other: "Tensor"):
+        return self.backend.div(self, other)
+
+    def matmul(self, other: "Tensor"):
+        return self.backend.matmul(self, other)
+
+    def dot(self, other: "Tensor"):
+        return self.backend.matmul(self, other)
+    
+    # Transformations
+    def transpose(self, order):
+        return self.backend.transpose(self, order)
+
+    def reshape(self, shape: Tuple[int]):
+        return self.backend.reshape(self, shape)
+
+    def flatten(self):
+        return self.backend.flatten(self)
+
+    def take(self, indices: "Tensor"):
+        return self.backend.take(self, indices)
+
+    def cat(self, others: Tuple["Tensor"], dim: Optional[int] = None):
+        return self.backend.cat(self, others, dim)
+   
+
+    # TODO: Does not really feel like a proper op
+    def dropout(self, p: float, training: bool):
+        return self.backend.dropout(self, p, training)
+
     def __add__(self, other: Union["Tensor", float, int]) -> "Tensor":
         return self.add(other)
 
@@ -128,29 +211,3 @@ class Tensor:
     def __neg__(self):
         return self.neg()
 
-    # TODO: Define log_softmax as a composition of exisiting differentiable ops
-    def logsoftmax(self):
-        raise NotImplementedError
-        # m = self.max(axis=len(self.shape)-1, keepdim=True)
-        # ss = m + (self-m).exp().sum(axis=len(self.shape)-1, keepdim=True).log()
-        # return self - ss
-
-    # === Some fine utils ===
-    @property
-    def first_item(self):
-        return self.data[0]
-
-    def torch(self, requires_grad: bool = False):
-        try:
-            import torch
-        except ImportError:
-            raise ImportError("torch not installed (pip install torch)")
-
-        torch_tensor = torch.from_numpy(self.data)
-        torch_tensor.requires_grad = requires_grad
-        return torch_tensor
-
-
-# We do it like Georg Hotz and build the tensors ops and at them dinamically
-from . import ops # noqa
-# from .utils import generate_stub_for_class; generate_stub_for_class(Tensor, "engine")
