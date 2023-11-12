@@ -1,12 +1,15 @@
-from typing import Type
+from typing import Dict, Type, Callable
 from argparse import Namespace
 from . import cpu
+from . import cuda
 
 from functools import lru_cache
 
-def apply_tensorfication(fn, tensor_type: Type, backend_tensor_type: Type):
-    def wrapper(*args, **kwargs):
 
+def apply_tensorfication(
+    fn: Callable, tensor_type: Type, backend_tensor_type: Type
+) -> Callable:
+    def wrapper(*args, **kwargs):
         val = fn(*args, **kwargs)
 
         if isinstance(val, tuple):
@@ -40,32 +43,46 @@ def apply_tensorfication(fn, tensor_type: Type, backend_tensor_type: Type):
 @lru_cache(maxsize=2)
 def backend_from_device(device: str, tensor_type: Type):
     """Load backend ops based on device.
-    
+
     Args:
         device (str): Device to load backend for.
         tensor_type (Type): Tensor type to use (Cant import Tensor directly, due to circular imports)
-        
+
     Returns:
         Namespace: Backend namespace.
 
     Note:
         * This function is cached to prevent loading backend multiple times.
-        * We lose type hints for backend functions, but we provide them in 
+        * We lose type hints for backend functions, but we provide them in
         the Tensor frontend anyway.
     """
 
     if device == "cpu":
-        ops = cpu.ops_map
-        for attr, func in ops.items():
-            ops[attr] = apply_tensorfication(func, tensor_type, cpu.BackendTensor)
+        cpu_ops: Dict[str, Callable] = cpu.ops_map
+        for attr, func in cpu_ops.items():
+            cpu_ops[attr] = apply_tensorfication(func, tensor_type, cpu.BackendTensor)
 
         factories = cpu.factories
         for attr, func in cpu.factories.items():
             factories[attr] = apply_tensorfication(func, tensor_type, cpu.BackendTensor)
 
-        backend_namespace =  Namespace(**ops, **factories, **cpu.funcs)
+        backend_namespace = Namespace(**cpu_ops, **factories, **cpu.funcs)
         return backend_namespace
     
+    elif device == "cuda":
+        cuda_ops: Dict[str, Callable] = cuda.ops_map
+        for attr, func in cuda_ops.items():
+            cuda_ops[attr] = apply_tensorfication(func, tensor_type, cuda.BackendTensor)
+
+        factories = cuda.factories
+        for attr, func in cuda.factories.items():
+            factories[attr] = apply_tensorfication(func, tensor_type, cuda.BackendTensor)
+
+        backend_namespace = Namespace(**cuda_ops, **factories, **cuda.funcs)
+        return backend_namespace
+
+
     raise ValueError(f"Unknown device {device}")
+
 
 __all__ = ["backend_from_device"]
