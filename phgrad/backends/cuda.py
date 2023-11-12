@@ -372,7 +372,6 @@ class LogSoftmax(CudaFunction):
         log_softmax_output = shifted_logits - cp.log(
             cp.sum(cp.exp(shifted_logits), axis=dim, keepdims=True)
         )
-
         return log_softmax_output
 
     @staticmethod

@@ -21,6 +21,7 @@ import numpy as np
 
 BackendTensor = np.ndarray
 
+
 def init_data(data: Any):
     if isinstance(data, np.ndarray):
         return data
@@ -28,7 +29,7 @@ def init_data(data: Any):
         data = np.array(data)
     except Exception as error:
         raise ValueError(f"Cannot convert {type(data)} to CPU tensor (numpy). {error}")
-    
+
     return data
 
 
@@ -36,7 +37,7 @@ class CPUFunction:
     """Our CPU backend. Mostly based on numpy.
 
     We ensure that all tensor that are passed are unnamed.
-    
+
     """
 
     __slots__ = ("prev", "forward_context")
@@ -49,10 +50,9 @@ class CPUFunction:
 
     def save_forward_context(self, *tensors: Tuple[np.ndarray]):
         return self.forward_context.extend(tensors)
-    
+
     @staticmethod
     def apply(self_, arg, *x, **kwargs):
-
         # We need to check for the type of the first argument
         if isinstance(arg, CPUFunction):
             op_function: "CPUFunction" = arg
@@ -70,8 +70,8 @@ class CPUFunction:
                 passing_args.append(t.data)
             else:
                 passing_args.append(t)
-        
-        ret = op_function.forward(ctx, *passing_args, **kwargs) # type: ignore
+
+        ret = op_function.forward(ctx, *passing_args, **kwargs)  # type: ignore
         return ret, ctx, ctx.differentiable
 
     def __str__(self) -> str:
@@ -369,13 +369,11 @@ class LogSoftmax(CPUFunction):
 
         # Shift the input for numerical stability
         x_max = self.max(axis=dim, keepdims=True)
-        # TODO: Handle nan values
-        shifted_logits = self - x_max
+        shifted_logits = np.subtract(self, x_max, out=self, where=~np.isnan(self))
+
         ctx.softmax_output = np.exp(shifted_logits)
         ctx.softmax_sum = np.sum(ctx.softmax_output, axis=dim, keepdims=True)
-        log_softmax_output = shifted_logits - np.log(
-            ctx.softmax_sum
-        )
+        log_softmax_output = shifted_logits - np.log(ctx.softmax_sum)
 
         return log_softmax_output
 
@@ -385,13 +383,14 @@ class LogSoftmax(CPUFunction):
         dim = ctx.dim
 
         # Compute softmax
-        # x_max = input.max(axis=dim, keepdims=True)
         softmax_output = ctx.softmax_output / ctx.softmax_sum
-        # Compute gradient
-        grad_input = grad_output - softmax_output * np.sum(
-            grad_output, axis=dim, keepdims=True
-        )
 
+        # Compute gradient
+        grad_input = np.subtract(
+            grad_output,
+            softmax_output * np.sum(grad_output, axis=dim, keepdims=True),
+            out=grad_output,
+        )
         return grad_input
 
 
@@ -422,19 +421,19 @@ class ReLU(CPUFunction):
         input = ctx.forward_context.pop()
         return grad_output * (input > 0)
 
-class Sigmoid(CPUFunction):
 
+class Sigmoid(CPUFunction):
     @staticmethod
     def forward(ctx, self: np.ndarray) -> np.ndarray:
         """Sigmoid of a tensor."""
         ctx.save_forward_context(self)
-        result =  1 / (1 + np.exp(-self))
+        result = 1 / (1 + np.exp(-self))
         ctx.result = result
         return result
 
     @staticmethod
     def backward(ctx, grad_output: np.ndarray):
-        return grad_output  * ctx.result * (1 - ctx.result)
+        return grad_output * ctx.result * (1 - ctx.result)
 
 
 class Transpose(CPUFunction):
@@ -460,8 +459,8 @@ class Reshape(CPUFunction):
         input = ctx.forward_context.pop()
         return np.reshape(grad_output, input.shape)
 
-class Flatten(CPUFunction):
 
+class Flatten(CPUFunction):
     @staticmethod
     def forward(ctx, self: np.ndarray) -> np.ndarray:
         ctx.save_forward_context(self)
@@ -504,8 +503,8 @@ class Take(CPUFunction):
 
         return grad_input
 
-class Dropout(CPUFunction):
 
+class Dropout(CPUFunction):
     @staticmethod
     def forward(ctx, self: np.ndarray, *, p: float, training: bool) -> np.ndarray:
         """Dropout function."""
@@ -517,7 +516,7 @@ class Dropout(CPUFunction):
             mask = None
 
         ctx.mask = mask
-        
+
         if training:
             return self * mask
         else:
@@ -530,8 +529,8 @@ class Dropout(CPUFunction):
         else:
             return grad_output
 
-class Cat(CPUFunction):
 
+class Cat(CPUFunction):
     @staticmethod
     def forward(ctx, self: np.ndarray, tensors: Tuple[np.ndarray], *, dim: int = 0):
         assert isinstance(tensors, tuple), "Tensors must be a tuple"
@@ -545,9 +544,9 @@ class Cat(CPUFunction):
     def backward(ctx, grad_output: np.ndarray):
         grads = np.split(grad_output, np.cumsum(ctx.shapes)[:-1], axis=ctx.axis)
         return tuple(grads)
-    
-class ArgMax(CPUFunction):
 
+
+class ArgMax(CPUFunction):
     differentiable = False
 
     @staticmethod
@@ -557,6 +556,7 @@ class ArgMax(CPUFunction):
     @staticmethod
     def backward(ctx, grad_output: np.ndarray):
         raise RuntimeError("ArgMax is not differentiable")
+
 
 # Factories
 def eye(n: int, m: Optional[int] = None) -> np.ndarray:
@@ -572,6 +572,7 @@ def eye(n: int, m: Optional[int] = None) -> np.ndarray:
     """
     return np.eye(n, m)
 
+
 def ones(shape: Tuple[int]) -> np.ndarray:
     """Create a tensor of ones.
 
@@ -583,6 +584,7 @@ def ones(shape: Tuple[int]) -> np.ndarray:
         Tensor: The tensor of ones.
     """
     return np.ones(shape)
+
 
 def zeros(shape: Tuple[int]) -> np.ndarray:
     """Create a tensor of zeros.
@@ -596,8 +598,10 @@ def zeros(shape: Tuple[int]) -> np.ndarray:
     """
     return np.zeros(shape)
 
+
 def attach_op(function: Type[CPUFunction]):
     return partial(function.apply, function)
+
 
 funcs = {
     "init_data": init_data,
@@ -625,7 +629,6 @@ ops_map = {
     "reshape": attach_op(Reshape),
     "flatten": attach_op(Flatten),
     "cat": attach_op(Cat),
-
     "argmax": attach_op(ArgMax),
 }
 
@@ -634,4 +637,3 @@ factories = {
     "ones": ones,
     "zeros": zeros,
 }
-
