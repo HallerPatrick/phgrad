@@ -1,7 +1,6 @@
 from typing import Optional, Tuple, Union, Type
 
 import numpy as np
-import cupy as cp
 
 from phgrad.backends import backend_from_device
 
@@ -70,8 +69,7 @@ class Tensor:
 
         grads = self.ctx.backward(self.ctx, self.grad)
         
-        # TODO: Remove grad type checking
-        if len(self.ctx.prev) == 1 or isinstance(grads, np.ndarray) or isinstance(grads, cp.ndarray):
+        if len(self.ctx.prev) == 1 or (not isinstance(grads, tuple)):
             grads = [grads]
 
         # Iterate over all previous tensors and set the gradient
@@ -162,10 +160,10 @@ class Tensor:
         return self.backend.log(self)
 
     def log_softmax(self, dim: Optional[int] = None) -> "Tensor":
-        return self.backend.log_softmax(self, dim)
+        return self.backend.log_softmax(self, dim=dim)
 
     def softmax(self, dim: Optional[int] = None) -> "Tensor":
-        return self.backend.softmax(self, dim)
+        return self.backend.softmax(self, dim=dim)
 
     def relu(self) -> "Tensor":
         return self.backend.relu(self)
@@ -177,8 +175,8 @@ class Tensor:
     def sum(self) -> "Tensor":
         return self.backend.sum(self)
 
-    def mean(self) -> "Tensor":
-        return self.backend.mean(self)
+    def mean(self, dim: Optional[int] = None) -> "Tensor":
+        return self.backend.mean(self, dim=dim)
 
     def max(self) -> "Tensor":
         return self.backend.max(self)
@@ -204,7 +202,7 @@ class Tensor:
 
     # Transformations
     def transpose(self, order) -> "Tensor":
-        return self.backend.transpose(self, order)
+        return self.backend.transpose(self, order=order)
 
     @property
     def T(self) -> "Tensor":
@@ -212,7 +210,7 @@ class Tensor:
         return self.transpose((1, 0))
 
     def reshape(self, shape: Union[int, Tuple[int]]) -> "Tensor":
-        return self.backend.reshape(self, shape)
+        return self.backend.reshape(self, shape=shape)
 
     def flatten(self) -> "Tensor":
         return self.backend.flatten(self)
@@ -221,11 +219,11 @@ class Tensor:
         return self.backend.take(self, indices)
 
     def cat(self, others: Tuple["Tensor"], dim: Optional[int] = None) -> "Tensor":
-        return self.backend.cat(self, others, dim)
+        return self.backend.cat(self, others, dim=dim)
 
     # TODO: Does not really feel like a proper op
     def dropout(self, p: float, training: bool) -> "Tensor":
-        return self.backend.dropout(self, p, training)
+        return self.backend.dropout(self, p=p, training=training)
 
     def __add__(self, other: TensorOrScalar) -> "Tensor":
         return self.add(other)
@@ -249,7 +247,7 @@ class Tensor:
         return self.neg()
     
     def argmax(self, dim: Optional[int] = None):
-        return self.backend.argmax(self, dim)
+        return self.backend.argmax(self, dim=dim)
 
     @classmethod
     def eye(

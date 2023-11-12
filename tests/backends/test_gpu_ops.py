@@ -3,9 +3,12 @@ import unittest
 from functools import partial
 
 import numpy as np
-import cupy as cp
+try:
+    import cupy as cp
+except ImportError:
+    cp = None
 
-from utils import requires_torch
+from utils import requires_torch, requires_cupy
 
 from phgrad.engine import Tensor as Tensor
 from phgrad.backends.cpu import LogSoftmax
@@ -16,6 +19,7 @@ def tensor_with_cuda(*args, **kwargs):
 TensorType = Tensor
 Tensor = tensor_with_cuda()
 
+@requires_cupy
 class TestReshape(unittest.TestCase):
     def test_reshape(self):
         tensor = Tensor(np.array([1, 2, 3, 4, 5, 6]))
@@ -25,6 +29,7 @@ class TestReshape(unittest.TestCase):
         assert tensor.data.shape == (2, 3)
 
 
+@requires_cupy
 class TestOps(unittest.TestCase):
     def test_add(self):
         t1 = Tensor(np.eye(3))
@@ -195,6 +200,7 @@ class TestOps(unittest.TestCase):
 
 
 @requires_torch
+@requires_cupy
 class TestLogSoftmax(unittest.TestCase):
     def test_forward_backward(self):
         """Test the forward pass with a simple input."""
@@ -219,6 +225,8 @@ class TestLogSoftmax(unittest.TestCase):
 
         np.testing.assert_almost_equal(grad_np, input_torch.grad.numpy(), decimal=5)
 
+
+@requires_cupy
 class TestCat(unittest.TestCase):
 
     def test_cat(self):

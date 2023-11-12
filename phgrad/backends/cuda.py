@@ -7,7 +7,11 @@ from typing import Any, List, Tuple, Optional, Type, Union
 
 from functools import partial
 
-import cupy as cp
+try:
+    import cupy as cp
+except ImportError:
+    raise ImportError("cupy not installed (pip install cupy-cuda12x)")
+
 import numpy as np
 
 BackendTensor = cp.ndarray
@@ -30,7 +34,7 @@ def to_dtype(tensor: BackendTensor, dtype: Type) -> BackendTensor:
 
 
 class CudaFunction:
-    """Our CPU backend. Mostly based on numpy"""
+    """Our GPU (CUDA) backend. Mostly based on cupy"""
 
     __slots__ = ("prev", "forward_context")
 
@@ -397,13 +401,16 @@ class Softmax(CudaFunction):
         """Softmax of a tensor."""
         ctx.save_forward_context(self)
         ctx.dim = dim
-        return cp.exp(self) / cp.exp(self).sum(axis=dim)
+        max_val = cp.max(self, axis=dim, keepdims=True)
+        exps = cp.exp(self - max_val)
+        ctx.exps = exps
+        return exps / exps.sum(axis=dim)
 
     @staticmethod
     def backward(ctx, grad_output: cp.ndarray):
-        (input,) = ctx.forward_context
         dim = ctx.dim
-        return grad_output * cp.exp(input) * (1 - cp.exp(input).sum(axis=dim))
+        exps = ctx.exps
+        return grad_output * exps * (1 - exps.sum(axis=dim))
 
 
 class ReLU(CudaFunction):

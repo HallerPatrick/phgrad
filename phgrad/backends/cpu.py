@@ -31,14 +31,13 @@ def init_data(data: Any):
     
     return data
 
-def copy(data: BackendTensor):
-    return data.copy()
-
-def to_dtype(data: BackendTensor, dtype: Any):
-    return data.astype(dtype)
 
 class CPUFunction:
-    """Our CPU backend. Mostly based on numpy"""
+    """Our CPU backend. Mostly based on numpy.
+
+    We ensure that all tensor that are passed are unnamed.
+    
+    """
 
     __slots__ = ("prev", "forward_context")
 
@@ -148,7 +147,7 @@ class Mul(CPUFunction):
     Function:
     f(x, y) = x * y
     d/dx f(x, y) = y
-    d/dy f(x, y) = xbackend
+    d/dy f(x, y) = x
     """
 
     @staticmethod
@@ -285,7 +284,7 @@ class Mean(CPUFunction):
     """
 
     @staticmethod
-    def forward(ctx, self: np.ndarray, dim: Optional[int] = None) -> np.ndarray:
+    def forward(ctx, self: np.ndarray, *, dim: Optional[int] = None) -> np.ndarray:
         """Mean of all elements in a tensor."""
         ctx.save_forward_context(self)
         ctx.dim = dim
@@ -363,7 +362,7 @@ class Log(CPUFunction):
 
 class LogSoftmax(CPUFunction):
     @staticmethod
-    def forward(ctx, self: np.ndarray, dim: int = 0) -> np.ndarray:
+    def forward(ctx, self: np.ndarray, *, dim: int = 0) -> np.ndarray:
         """Log softmax of a tensor."""
         ctx.save_forward_context(self)
         ctx.dim = dim
@@ -381,7 +380,7 @@ class LogSoftmax(CPUFunction):
     @staticmethod
     def backward(ctx, grad_output: np.ndarray):
         """Backward pass for log softmax."""
-        (input,) = ctx.forward_context
+        input = ctx.forward_context.pop()
         dim = ctx.dim
 
         # Compute softmax
@@ -401,7 +400,7 @@ class LogSoftmax(CPUFunction):
 
 class Softmax(CPUFunction):
     @staticmethod
-    def forward(ctx, self: np.ndarray, dim: int = 0) -> np.ndarray:
+    def forward(ctx, self: np.ndarray, *, dim: int = 0) -> np.ndarray:
         """Softmax of a tensor."""
         ctx.save_forward_context(self)
         ctx.dim = dim
@@ -409,7 +408,7 @@ class Softmax(CPUFunction):
 
     @staticmethod
     def backward(ctx, grad_output: np.ndarray):
-        (input,) = ctx.forward_context
+        input = ctx.forward_context.pop()
         dim = ctx.dim
         return grad_output * np.exp(input) * (1 - np.exp(input).sum(axis=dim))
 
@@ -423,7 +422,7 @@ class ReLU(CPUFunction):
 
     @staticmethod
     def backward(ctx, grad_output: np.ndarray):
-        (input,) = ctx.forward_context
+        input = ctx.forward_context.pop()
         return grad_output * (input > 0)
 
 class Sigmoid(CPUFunction):
@@ -438,14 +437,13 @@ class Sigmoid(CPUFunction):
 
     @staticmethod
     def backward(ctx, grad_output: np.ndarray):
-        result = ctx.result
-        return grad_output  * result * (1 - result)
+        return grad_output  * ctx.result * (1 - ctx.result)
 
 
 class Transpose(CPUFunction):
     @staticmethod
-    def forward(ctx, self: np.ndarray, order) -> np.ndarray:
-        ctx.save_forward_context(order)
+    def forward(ctx, self: np.ndarray, *, order) -> np.ndarray:
+        ctx.save_forward_context(self)
         ctx.order = order
         return np.transpose(self, order)
 
@@ -456,26 +454,26 @@ class Transpose(CPUFunction):
 
 class Reshape(CPUFunction):
     @staticmethod
-    def forward(ctx, self: np.ndarray, shape: Union[int, Tuple[int]]) -> np.ndarray:
-        ctx.save_forward_context(self.shape)
+    def forward(ctx, self: np.ndarray, *, shape: Union[int, Tuple[int]]) -> np.ndarray:
+        ctx.save_forward_context(self)
         return np.reshape(self, shape)
 
     @staticmethod
     def backward(ctx, grad_output: np.ndarray):
-        input_shape = ctx.forward_context[0]
-        return np.reshape(grad_output, input_shape)
+        input = ctx.forward_context.pop()
+        return np.reshape(grad_output, input.shape)
 
 class Flatten(CPUFunction):
 
     @staticmethod
     def forward(ctx, self: np.ndarray) -> np.ndarray:
-        ctx.save_forward_context(self.shape)
+        ctx.save_forward_context(self)
         return np.reshape(self, (self.shape[0], -1))
 
     @staticmethod
     def backward(ctx, grad_output: np.ndarray):
-        input_shape = ctx.forward_context[0]
-        return np.reshape(grad_output, input_shape)
+        input = ctx.forward_context.pop()
+        return np.reshape(grad_output, input.shape)
 
 
 class Take(CPUFunction):
@@ -485,20 +483,23 @@ class Take(CPUFunction):
     """
 
     @staticmethod
-    def forward(ctx, input: np.ndarray, indices: np.ndarray) -> np.ndarray:
+    def forward(ctx, self: np.ndarray, indices: np.ndarray) -> np.ndarray:
         """Take elements from a tensor using indices."""
-        ctx.save_forward_context(input, indices)
+        ctx.save_forward_context(self)
+        ctx.indices = indices
         # Assume indices are for the first dimension
-        return input[indices]
+        return self[indices]
 
     @staticmethod
     def backward(ctx, grad_output: np.ndarray):
-        input, indices = ctx.forward_context
+        input = ctx.forward_context.pop()
         grad_input = np.zeros_like(input, dtype=np.float32)
 
         # TODO: Should we be concerned if indices is a memoryview?
-        if isinstance(indices, memoryview):
-            indices = indices.tolist()
+        if isinstance(ctx.indices, memoryview):
+            indices = ctx.indices.tolist()
+        else:
+            indices = ctx.indices
 
         # Iterate over each index and add the corresponding gradient
         for idx, grad in zip(indices, grad_output):
@@ -509,9 +510,10 @@ class Take(CPUFunction):
 class Dropout(CPUFunction):
 
     @staticmethod
-    def forward(ctx, self: np.ndarray, p: float, training: bool) -> np.ndarray:
+    def forward(ctx, self: np.ndarray, *, p: float, training: bool) -> np.ndarray:
         """Dropout function."""
-        ctx.save_forward_context(p, training)
+        ctx.save_forward_context(p)
+        ctx.training = training
         if training:
             mask = np.random.binomial(1, p, size=self.shape)
         else:
@@ -526,9 +528,7 @@ class Dropout(CPUFunction):
 
     @staticmethod
     def backward(ctx, grad_output: np.ndarray):
-        _, training = ctx.forward_context
-
-        if training:
+        if ctx.training:
             return grad_output * ctx.mask
         else:
             return grad_output
@@ -536,7 +536,7 @@ class Dropout(CPUFunction):
 class Cat(CPUFunction):
 
     @staticmethod
-    def forward(ctx, self: np.ndarray, tensors: Tuple[np.ndarray], dim: int = 0):
+    def forward(ctx, self: np.ndarray, tensors: Tuple[np.ndarray], *, dim: int = 0):
         assert isinstance(tensors, tuple), "Tensors must be a tuple"
         ctx.save_forward_context(self, tensors)
         all_tensors = [self, *tensors]
@@ -554,7 +554,7 @@ class ArgMax(CPUFunction):
     differentiable = False
 
     @staticmethod
-    def forward(ctx, self: np.ndarray, dim: int = 0) -> np.ndarray:
+    def forward(ctx, self: np.ndarray, *, dim: int = 0) -> np.ndarray:
         return np.argmax(self, axis=dim)
 
     @staticmethod
@@ -604,8 +604,6 @@ def attach_op(function: Type[CPUFunction]):
 
 funcs = {
     "init_data": init_data,
-    "copy": copy,
-    "to_dtype": to_dtype,
 }
 
 ops_map = {

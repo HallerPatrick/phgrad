@@ -65,7 +65,7 @@ def backend_from_device(device: str, tensor_type: Type):
     """
 
     assert device in ["cpu", "cuda"], f"Unknown device {device}"
-
+    
     backend = importlib.import_module(f"phgrad.backends.{device}")
     backend_ops: Dict[str, Callable] = backend.ops_map
     for attr, func in backend_ops.items():

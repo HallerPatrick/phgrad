@@ -12,6 +12,11 @@ requires_torch = pytest.mark.skipif(
     reason="requires torch",
 )
 
+requires_cupy = pytest.mark.skipif(
+    not importlib.util.find_spec("cupy"),
+    reason="requires cupy",
+)
+
 
 def fetch(url):
     fp = os.path.join("/tmp", hashlib.md5(url.encode("utf-8")).hexdigest())
