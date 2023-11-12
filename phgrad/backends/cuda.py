@@ -361,6 +361,7 @@ class LogSoftmax(CudaFunction):
     @staticmethod
     def forward(ctx, self: cp.ndarray, dim: int = 0) -> cp.ndarray:
         """Log softmax of a tensor."""
+        # TODO: Optimize this like the cpu backend
         ctx.save_forward_context(self)
         ctx.dim = dim
 

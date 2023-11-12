@@ -371,8 +371,10 @@ class LogSoftmax(CPUFunction):
         x_max = self.max(axis=dim, keepdims=True)
         # TODO: Handle nan values
         shifted_logits = self - x_max
+        ctx.softmax_output = np.exp(shifted_logits)
+        ctx.softmax_sum = np.sum(ctx.softmax_output, axis=dim, keepdims=True)
         log_softmax_output = shifted_logits - np.log(
-            np.sum(np.exp(shifted_logits), axis=dim, keepdims=True)
+            ctx.softmax_sum
         )
 
         return log_softmax_output
@@ -380,16 +382,11 @@ class LogSoftmax(CPUFunction):
     @staticmethod
     def backward(ctx, grad_output: np.ndarray):
         """Backward pass for log softmax."""
-        input = ctx.forward_context.pop()
         dim = ctx.dim
 
         # Compute softmax
-        x_max = input.max(axis=dim, keepdims=True)
-        shifted_logits = input - x_max
-        softmax_output = np.exp(shifted_logits) / np.sum(
-            np.exp(shifted_logits), axis=dim, keepdims=True
-        )
-
+        # x_max = input.max(axis=dim, keepdims=True)
+        softmax_output = ctx.softmax_output / ctx.softmax_sum
         # Compute gradient
         grad_input = grad_output - softmax_output * np.sum(
             grad_output, axis=dim, keepdims=True
