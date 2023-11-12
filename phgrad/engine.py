@@ -1,7 +1,7 @@
 from typing import Optional, Tuple, Union, Type
 
 import numpy as np
-import numpy.typing as npt
+import cupy as cp
 
 from phgrad.backends import backend_from_device
 
@@ -12,18 +12,20 @@ class Tensor:
 
     def __init__(
         self,
-        value: npt.NDArray,
+        value: np.ndarray,
         requires_grad=True,
         device: Union[str, int] = "cpu",
         _backend=None,
     ):
         if _backend is None:
+            self.device = device
             self.backend = backend_from_device(device, tensor_type=Tensor)
         else:
             self.backend = _backend
+            # NOTE: This only works with one device for now
+            self.device = self.backend.name
 
-        self.device = device
-
+        
         self.data = self.backend.init_data(value)
         self.grad = None
         self.requires_grad: bool = requires_grad
@@ -67,8 +69,9 @@ class Tensor:
         assert self.grad is not None
 
         grads = self.ctx.backward(self.ctx, self.grad)
-
-        if len(self.ctx.prev) == 1 or isinstance(grads, np.ndarray):
+        
+        # TODO: Remove grad type checking
+        if len(self.ctx.prev) == 1 or isinstance(grads, np.ndarray) or isinstance(grads, cp.ndarray):
             grads = [grads]
 
         # Iterate over all previous tensors and set the gradient
@@ -91,11 +94,6 @@ class Tensor:
             t.grad = g
             t.backward(False)
 
-    @property
-    def T(self) -> "Tensor":
-        """Return the transpose of the tensor."""
-        return self.transpose((1, 0))
-
     def __str__(self) -> str:
         return f"Tensor({self.data}, grad_fn={self.ctx}, grad={self.grad})"
 
@@ -104,7 +102,7 @@ class Tensor:
 
     # === Some fine utils ===
 
-    def copy(self):
+    def detach(self) -> "Tensor":
         return Tensor(
             self.backend.copy(self.data),
             requires_grad=self.requires_grad,
@@ -126,77 +124,107 @@ class Tensor:
         torch_tensor.requires_grad = requires_grad
         return torch_tensor
 
+    def to(self, device: Union[str, int], in_place=False) -> "Tensor":
+
+        if self.device == device:
+            return self
+
+        if in_place:
+            new_tensor = self.detach()
+            self = Tensor(
+                new_tensor.data,
+                device=device,
+                requires_grad=self.requires_grad,
+            )
+            return self
+
+        return Tensor(
+            self.backend.copy(self.data),
+            requires_grad=self.requires_grad,
+            device=device,
+            _backend=self.backend,
+        )
+
+    def to_dtype(self, dtype: Type) -> "Tensor":
+        return self.backend.to_dtype(self, dtype)
+
+
     # ========= OPS =========
 
     # Unary ops
-    def exp(self):
+    def exp(self) -> "Tensor":
         return self.backend.exp(self)
 
-    def neg(self):
+    def neg(self) -> "Tensor":
         return self.backend.neg(self)
 
-    def log(self):
+    def log(self) -> "Tensor":
         return self.backend.log(self)
 
-    def log_softmax(self, dim: Optional[int] = None):
+    def log_softmax(self, dim: Optional[int] = None) -> "Tensor":
         return self.backend.log_softmax(self, dim)
 
-    def softmax(self, dim: Optional[int] = None):
+    def softmax(self, dim: Optional[int] = None) -> "Tensor":
         return self.backend.softmax(self, dim)
 
-    def relu(self):
+    def relu(self) -> "Tensor":
         return self.backend.relu(self)
 
-    def sigmoid(self):
+    def sigmoid(self) -> "Tensor":
         return self.backend.sigmoid(self)
 
     # Unary ops + reduce
-    def sum(self):
+    def sum(self) -> "Tensor":
         return self.backend.sum(self)
 
-    def mean(self):
+    def mean(self) -> "Tensor":
         return self.backend.mean(self)
 
-    def max(self):
+    def max(self) -> "Tensor":
         return self.backend.max(self)
 
     # Binary ops
-    def add(self, other: TensorOrScalar):
+    def add(self, other: TensorOrScalar) -> "Tensor":
         return self.backend.add(self, other)
 
-    def sub(self, other: TensorOrScalar):
+    def sub(self, other: TensorOrScalar) -> "Tensor":
         return self.backend.sub(self, other)
 
-    def mul(self, other: TensorOrScalar):
+    def mul(self, other: TensorOrScalar) -> "Tensor":
         return self.backend.mul(self, other)
 
-    def div(self, other: TensorOrScalar):
+    def div(self, other: TensorOrScalar) -> "Tensor":
         return self.backend.div(self, other)
 
-    def matmul(self, other: "Tensor"):
+    def matmul(self, other: "Tensor") -> "Tensor":
         return self.backend.matmul(self, other)
 
-    def dot(self, other: "Tensor"):
+    def dot(self, other: "Tensor") -> "Tensor":
         return self.backend.matmul(self, other)
 
     # Transformations
-    def transpose(self, order):
+    def transpose(self, order) -> "Tensor":
         return self.backend.transpose(self, order)
 
-    def reshape(self, shape: Union[int, Tuple[int]]):
+    @property
+    def T(self) -> "Tensor":
+        """Return the transpose of the tensor."""
+        return self.transpose((1, 0))
+
+    def reshape(self, shape: Union[int, Tuple[int]]) -> "Tensor":
         return self.backend.reshape(self, shape)
 
-    def flatten(self):
+    def flatten(self) -> "Tensor":
         return self.backend.flatten(self)
 
-    def take(self, indices: "Tensor"):
+    def take(self, indices: "Tensor") -> "Tensor":
         return self.backend.take(self, indices)
 
-    def cat(self, others: Tuple["Tensor"], dim: Optional[int] = None):
+    def cat(self, others: Tuple["Tensor"], dim: Optional[int] = None) -> "Tensor":
         return self.backend.cat(self, others, dim)
 
     # TODO: Does not really feel like a proper op
-    def dropout(self, p: float, training: bool):
+    def dropout(self, p: float, training: bool) -> "Tensor":
         return self.backend.dropout(self, p, training)
 
     def __add__(self, other: TensorOrScalar) -> "Tensor":
@@ -230,7 +258,7 @@ class Tensor:
         requires_grad: bool = False,
         device: str = "cpu",
     ):
-        assert isinstance(shape, int) or len(shape) <= 2, "Only support 1D and 2D tensor"
+        assert isinstance(shape, int) or len(shape) <= 2, "Only support 1D and 2D tensor creation"
         backend = backend_from_device(device, Tensor)
         return cls(
             backend.eye(*shape),

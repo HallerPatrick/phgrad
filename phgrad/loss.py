@@ -16,12 +16,17 @@ def nllloss(inputs: Tensor, targets: Tensor, reduce="mean"):
     assert reduce in ["mean", "sum"], "Invalid reduce"
 
     # Flatten the inputs and create an array of indices corresponding to the target classes
-    inputs_np = np.asarray(inputs.data, dtype=np.float32)
-    targets_np = np.asarray(targets.data, dtype=np.int64)
+    # TODO: MOve those ops to the backend
+    if inputs.device == "cpu":
+        inputs_np = np.asarray(inputs.data, dtype=np.float32)
+        targets_np = np.asarray(targets.data, dtype=np.int64)
+    else:
+        inputs_np = np.asarray(inputs.data.get(), dtype=np.float32)
+        targets_np = np.asarray(targets.data.get(), dtype=np.int64)
 
     num_classes = inputs_np.shape[1]
     # TODO: Add arange to tensor
-    indices = Tensor(np.arange(len(targets_np)) * num_classes + targets_np, requires_grad=False)
+    indices = Tensor(np.arange(len(targets_np)) * num_classes + targets_np, requires_grad=False, device=inputs.device)
 
     inputs = inputs.reshape(-1)
     our_log_probs = inputs.take(indices)

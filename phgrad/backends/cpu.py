@@ -31,6 +31,11 @@ def init_data(data: Any):
     
     return data
 
+def copy(data: BackendTensor):
+    return data.copy()
+
+def to_dtype(data: BackendTensor, dtype: Any):
+    return data.astype(dtype)
 
 class CPUFunction:
     """Our CPU backend. Mostly based on numpy"""
@@ -143,7 +148,7 @@ class Mul(CPUFunction):
     Function:
     f(x, y) = x * y
     d/dx f(x, y) = y
-    d/dy f(x, y) = x
+    d/dy f(x, y) = xbackend
     """
 
     @staticmethod
@@ -599,6 +604,8 @@ def attach_op(function: Type[CPUFunction]):
 
 funcs = {
     "init_data": init_data,
+    "copy": copy,
+    "to_dtype": to_dtype,
 }
 
 ops_map = {

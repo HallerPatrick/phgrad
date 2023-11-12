@@ -5,8 +5,9 @@ from phgrad.engine import Tensor
 class Module:
     """Base class for all modules."""
 
-    def __init__(self):
+    def __init__(self, device="cpu"):
         self.training = True
+        self.device = device
 
     def forward(self, *args: Any, **kwargs: Any) -> Any:
         raise NotImplementedError
@@ -27,6 +28,13 @@ class Module:
 
             if isinstance(parameter, Tensor):
                 yield parameter
+
+    def to(self, device):
+        """Move all parameters to the specified device."""
+        for parameter in self._parameters():
+            parameter.to(device, in_place=True)
+
+        return self
 
     def train(self):
         """Set the module in training mode.

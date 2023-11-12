@@ -8,6 +8,7 @@ from typing import Any, List, Tuple, Optional, Type, Union
 from functools import partial
 
 import cupy as cp
+import numpy as np
 
 BackendTensor = cp.ndarray
 
@@ -17,12 +18,18 @@ def init_data(data: Any):
     try:
         data = cp.array(data)
     except Exception as error:
-        raise ValueError(f"Cannot convert {type(data)} to CPU tensor (numpy). {error}")
+        raise ValueError(f"Cannot convert {type(data)} to GPU tensor (cupy). {error}")
     
     return data
 
+def copy(tensor: BackendTensor) -> BackendTensor:
+    return cp.copy(tensor)
 
-class CPUFunction:
+def to_dtype(tensor: BackendTensor, dtype: Type) -> BackendTensor:
+    return tensor.astype(dtype)
+
+
+class CudaFunction:
     """Our CPU backend. Mostly based on numpy"""
 
     __slots__ = ("prev", "forward_context")
@@ -40,11 +47,11 @@ class CPUFunction:
     def apply(self_, arg, *x, **kwargs):
 
         # We need to check for the type of the first argument
-        if isinstance(arg, CPUFunction):
-            op_function: "CPUFunction" = arg
+        if isinstance(arg, CudaFunction):
+            op_function: "CudaFunction" = arg
             x = [self_] + list(x)
         else:
-            op_function: "CPUFunction" = self_
+            op_function: "CudaFunction" = self_
             x = [arg] + list(x)
 
         ctx = op_function(*x)
@@ -106,7 +113,7 @@ def unbroadcast(grad, original_shape):
     return grad
 
 
-class Add(CPUFunction):
+class Add(CudaFunction):
     """Addition function.
 
     Function:
@@ -127,7 +134,7 @@ class Add(CPUFunction):
         return unbroadcast(grad_output, x.shape), unbroadcast(grad_output, y.shape)
 
 
-class Mul(CPUFunction):
+class Mul(CudaFunction):
     """Multiplication function.
 
     Function:
@@ -150,7 +157,7 @@ class Mul(CPUFunction):
         )
 
 
-class Sub(CPUFunction):
+class Sub(CudaFunction):
     """Subtraction function.
 
     Function:
@@ -171,7 +178,7 @@ class Sub(CPUFunction):
         return unbroadcast(grad_output, x.shape), unbroadcast(-grad_output, y.shape)
 
 
-class Div(CPUFunction):
+class Div(CudaFunction):
     """Division function.
 
     Function:
@@ -214,7 +221,7 @@ class Div(CPUFunction):
 #         )
 
 
-class Exp(CPUFunction):
+class Exp(CudaFunction):
     @staticmethod
     def forward(ctx, self: cp.ndarray) -> cp.ndarray:
         """Exponential of a tensor."""
@@ -228,7 +235,7 @@ class Exp(CPUFunction):
         return grad_output * input
 
 
-class Sum(CPUFunction):
+class Sum(CudaFunction):
     """Sum function.
 
     Function:
@@ -249,7 +256,7 @@ class Sum(CPUFunction):
         return grad_output * cp.ones_like(input_tensor)
 
 
-class Neg(CPUFunction):
+class Neg(CudaFunction):
     @staticmethod
     def forward(ctx, self: cp.ndarray) -> cp.ndarray:
         """Negation of a tensor."""
@@ -261,7 +268,7 @@ class Neg(CPUFunction):
         return -grad_output
 
 
-class Mean(CPUFunction):
+class Mean(CudaFunction):
     """Mean function.
 
     Function:
@@ -296,7 +303,7 @@ class Mean(CPUFunction):
         return grad_output * cp.ones_like(input_tensor) / len(input_tensor)
 
 
-class Max(CPUFunction):
+class Max(CudaFunction):
     """Max function.
 
     Function:
@@ -317,7 +324,7 @@ class Max(CPUFunction):
         return grad_output * cp.ones_like(input_tensor)
 
 
-class MatMul(CPUFunction):
+class MatMul(CudaFunction):
     @staticmethod
     def forward(ctx, self: cp.ndarray, tensor: cp.ndarray) -> cp.ndarray:
         """Matrix multiplication of two tensors."""
@@ -333,7 +340,7 @@ class MatMul(CPUFunction):
         return grad_input, grad_weight
 
 
-class Log(CPUFunction):
+class Log(CudaFunction):
     @staticmethod
     def forward(ctx, self: cp.ndarray) -> cp.ndarray:
         """Log of a tensor."""
@@ -346,7 +353,7 @@ class Log(CPUFunction):
         return grad_output / input
 
 
-class LogSoftmax(CPUFunction):
+class LogSoftmax(CudaFunction):
     @staticmethod
     def forward(ctx, self: cp.ndarray, dim: int = 0) -> cp.ndarray:
         """Log softmax of a tensor."""
@@ -384,7 +391,7 @@ class LogSoftmax(CPUFunction):
         return grad_input
 
 
-class Softmax(CPUFunction):
+class Softmax(CudaFunction):
     @staticmethod
     def forward(ctx, self: cp.ndarray, dim: int = 0) -> cp.ndarray:
         """Softmax of a tensor."""
@@ -399,7 +406,7 @@ class Softmax(CPUFunction):
         return grad_output * cp.exp(input) * (1 - cp.exp(input).sum(axis=dim))
 
 
-class ReLU(CPUFunction):
+class ReLU(CudaFunction):
     @staticmethod
     def forward(ctx, self: cp.ndarray) -> cp.ndarray:
         """ReLU of a tensor."""
@@ -411,7 +418,7 @@ class ReLU(CPUFunction):
         (input,) = ctx.forward_context
         return grad_output * (input > 0)
 
-class Sigmoid(CPUFunction):
+class Sigmoid(CudaFunction):
 
     @staticmethod
     def forward(ctx, self: cp.ndarray) -> cp.ndarray:
@@ -427,7 +434,7 @@ class Sigmoid(CPUFunction):
         return grad_output  * result * (1 - result)
 
 
-class Transpose(CPUFunction):
+class Transpose(CudaFunction):
     @staticmethod
     def forward(ctx, self: cp.ndarray, order) -> cp.ndarray:
         ctx.save_forward_context(order)
@@ -436,10 +443,12 @@ class Transpose(CPUFunction):
 
     @staticmethod
     def backward(ctx, x):
-        return cp.transpose(x, tuple(cp.argsort(ctx.order)))
+        # TODO: Resolve np dep
+        return cp.transpose(x, tuple(np.argsort(ctx.order)))
+        # return cp.transpose(x, tuple(cp.argsort(ctx.order)))
 
 
-class Reshape(CPUFunction):
+class Reshape(CudaFunction):
     @staticmethod
     def forward(ctx, self: cp.ndarray, shape: Union[int, Tuple[int]]) -> cp.ndarray:
         ctx.save_forward_context(self.shape)
@@ -450,7 +459,7 @@ class Reshape(CPUFunction):
         input_shape = ctx.forward_context[0]
         return cp.reshape(grad_output, input_shape)
 
-class Flatten(CPUFunction):
+class Flatten(CudaFunction):
 
     @staticmethod
     def forward(ctx, self: cp.ndarray) -> cp.ndarray:
@@ -463,7 +472,7 @@ class Flatten(CPUFunction):
         return cp.reshape(grad_output, input_shape)
 
 
-class Take(CPUFunction):
+class Take(CudaFunction):
     """Take function without a dimension parameter.
 
     NOTE: The current implementation only works with flat indices
@@ -491,7 +500,7 @@ class Take(CPUFunction):
 
         return grad_input
 
-class Dropout(CPUFunction):
+class Dropout(CudaFunction):
 
     @staticmethod
     def forward(ctx, self: cp.ndarray, p: float, training: bool) -> cp.ndarray:
@@ -518,7 +527,7 @@ class Dropout(CPUFunction):
         else:
             return grad_output
 
-class Cat(CPUFunction):
+class Cat(CudaFunction):
 
     @staticmethod
     def forward(ctx, self: cp.ndarray, tensors: Tuple[cp.ndarray], dim: int = 0):
@@ -527,14 +536,22 @@ class Cat(CPUFunction):
         all_tensors = [self, *tensors]
         ctx.shapes = [t.shape for t in all_tensors]
         ctx.axis = dim
-        return cp.concatenate([t.data for t in all_tensors], axis=ctx.axis)
+        
+        # NOTE: We are passing the tensor object down into the backend, I dont think we should do that
+        data = []
+        for t in all_tensors:
+            if isinstance(t, cp.ndarray):
+                data.append(t)
+            else:
+                data.append(t.data)
+        return cp.concatenate(data, axis=ctx.axis)
 
     @staticmethod
     def backward(ctx, grad_output: cp.ndarray):
         grads = cp.split(grad_output, cp.cumsum(ctx.shapes)[:-1], axis=ctx.axis)
         return tuple(grads)
     
-class ArgMax(CPUFunction):
+class ArgMax(CudaFunction):
 
     differentiable = False
 
@@ -584,11 +601,12 @@ def zeros(shape: Tuple[int]) -> cp.ndarray:
     """
     return cp.zeros(shape)
 
-def attach_op(function: Type[CPUFunction]):
+def attach_op(function: Type[CudaFunction]):
     return partial(function.apply, function)
 
 funcs = {
     "init_data": init_data,
+    "copy": copy,
 }
 
 ops_map = {

@@ -6,14 +6,14 @@ from phgrad.init import he_initialization
 from .base import Module
 
 class Linear(Module):
-    def __init__(self, inp_dim: int, output_dim: int, bias: bool = True):
-        super().__init__()
-        self.weights = Tensor(he_initialization((output_dim, inp_dim)))
+    def __init__(self, inp_dim: int, output_dim: int, bias: bool = True, device="cpu"):
+        super().__init__(device=device)
+        self.weights = Tensor(he_initialization((output_dim, inp_dim)), device=device)
 
         self.biases: Optional[Tensor] = None
 
         if bias:
-            self.biases = Tensor(he_initialization((output_dim,)))
+            self.biases = Tensor(he_initialization((output_dim,)), device)
 
     def forward(self, t: Tensor) -> Tensor:
         if self.biases is None:
@@ -24,11 +24,11 @@ class MLP(Module):
     """A simple Multi Layer Perceptron."""
 
     def __init__(
-        self, inp_dim: int, hidden_size: int, output_dim: int, bias: bool = True
+        self, inp_dim: int, hidden_size: int, output_dim: int, bias: bool = True, device="cpu"
     ):
-        super().__init__()
-        self.l1 = Linear(inp_dim, hidden_size, bias=bias)
-        self.l2 = Linear(hidden_size, output_dim, bias=bias)
+        super().__init__(device=device)
+        self.l1 = Linear(inp_dim, hidden_size, bias=bias, device=device)
+        self.l2 = Linear(hidden_size, output_dim, bias=bias, device=device)
 
     def forward(self, t: Tensor) -> Tensor:
         t = self.l1(t)
