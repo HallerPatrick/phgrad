@@ -2,10 +2,12 @@ import os
 import sys
 import time
 import numpy as np
-import matplotlib.pyplot as plt
+# import matplotlib.pyplot as plt
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+
+from phgrad.debug import print_summary
 from phgrad.engine import Tensor
 from phgrad.nn import MLP
 from phgrad.optim import SGD, Adam
@@ -21,20 +23,29 @@ class MNIST():
         self.Y_test = np.eye(10)[Y_test.reshape(-1)]
 
     def run(self):
-        mlp = MLP(784, 64, 10, bias=False)
-        # optimizer = SGD(mlp.parameters(), lr=0.005)
-        optimizer = Adam(mlp.parameters())
+        device = "cpu"
+        mlp = MLP(784, 64, 10, bias=False, device=device)
+        optimizer = SGD(mlp.parameters(), lr=0.005)
+        # optimizer = Adam(mlp.parameters())
 
         losses = []
         accuracies = []
 
-        start_time = time.time()
 
+        dataset_loader = []
+        
+        start_time = time.time()
+        for i in range(0, len(self.X_train), 32):
+            dataset_loader.append((Tensor(self.X_train[i : i + 32], device=device), Tensor(np.argmax(self.Y_train[i : i + 32], axis=1), device=device)))
+        end_time = time.time()
+        print(f"Preprocess Time: {end_time - start_time:.2f} seconds")
+
+
+        start_time = time.time()
         for epoch in range(10):
-            for i in range(0, len(self.X_train), 32):
+            for batch in dataset_loader:
                 optimizer.zero_grad()
-                x = Tensor(self.X_train[i : i + 32])
-                y = Tensor(np.argmax(self.Y_train[i : i + 32], axis=1))
+                x, y = batch
                 y_pred = mlp(x)
                 y_pred = y_pred.log_softmax(dim=1)
                 loss = nllloss(y_pred, y, reduce="mean")
@@ -42,34 +53,22 @@ class MNIST():
                 optimizer.step()
                 losses.append(loss.data)
 
-            y_pred = mlp(Tensor(self.X_test))
+            y_pred = mlp(Tensor(self.X_test, device=device))
             y_pred = np.argmax(y_pred.data, axis=1)
 
-            accuracy = (y_pred == self.Y_test.argmax(axis=1)).mean()
+            if device == "cpu":
+                accuracy = (y_pred == self.Y_test.argmax(axis=1)).mean()
+            else:
+                accuracy = (y_pred.get() == self.Y_test.argmax(axis=1)).mean()
+
             accuracies.append(accuracy)
 
             print(f"Epoch {epoch}: {accuracy:.2f}")
 
         end_time = time.time()
+        print_summary()
+
         print(f"Training time: {end_time - start_time:.2f} seconds")
-
-        # plt.figure(figsize=(12, 5))
-        # plt.subplot(1, 2, 1)
-        # plt.plot(losses, label='Loss')
-        # plt.title('Training Loss')
-        # plt.xlabel('Step')
-        # plt.ylabel('Loss')
-        # plt.legend()
-        #
-        # plt.subplot(1, 2, 2)
-        # plt.plot(accuracies, label='Accuracy')
-        # plt.title('Training Accuracy')
-        # plt.xlabel('Epoch')
-        # plt.ylabel('Accuracy')
-        # plt.legend()
-        #
-        # plt.show()
-
 
 if __name__ == "__main__":
     mnist = MNIST()

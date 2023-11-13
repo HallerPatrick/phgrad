@@ -1,7 +1,10 @@
+import time
 from typing import Optional, Tuple, Union, Type
 
 import numpy as np
 
+from phgrad.debug import DEBUG, backward_time
+from phgrad.debug import tensor_creations
 from phgrad.backends import backend_from_device
 
 TensorOrScalar = Union["Tensor", float, int]
@@ -23,7 +26,9 @@ class Tensor:
             self.backend = _backend
             # NOTE: This only works with one device for now
             self.device = self.backend.name
-
+        
+        if DEBUG == 1:
+            tensor_creations[device] += 1
         
         self.data = self.backend.init_data(value)
         self.grad = None
@@ -66,8 +71,11 @@ class Tensor:
             self.grad = np.ones_like(self.data)
 
         assert self.grad is not None
-
-        grads = self.ctx.backward(self.ctx, self.grad)
+        
+        if DEBUG == 1:
+            start_time = time.time()
+            grads = self.ctx.backward(self.ctx, self.grad)
+            backward_time[str(self.ctx)] += (time.time() - start_time)
         
         if len(self.ctx.prev) == 1 or (not isinstance(grads, tuple)):
             grads = [grads]

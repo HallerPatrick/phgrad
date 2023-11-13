@@ -2,17 +2,20 @@
 
 This is more or less a copy of the CPU backend but uses cupy instead of numpy.
 """
-
+import time
 from typing import Any, List, Tuple, Optional, Type, Union
 
 from functools import partial
 
 try:
     import cupy as cp
+    import cupyx as cpx
 except ImportError:
     raise ImportError("cupy not installed (pip install cupy-cuda12x)")
 
 import numpy as np
+
+from .. import debug
 
 BackendTensor = cp.ndarray
 
@@ -60,6 +63,7 @@ class CudaFunction:
 
         ctx = op_function(*x)
 
+
         # Why are we even converting to a tensor in the first place?
         passing_args = []
         for t in x:
@@ -67,8 +71,16 @@ class CudaFunction:
                 passing_args.append(t.data)
             else:
                 passing_args.append(t)
+
+        if debug.DEBUG:
+            debug.func_calls[str(op_function)] += 1
+            time_start = time.time()
         
         ret = op_function.forward(ctx, *passing_args, **kwargs) # type: ignore
+
+        if debug.DEBUG == 1:
+            debug.forward_time[str(op_function)] += (time.time() - time_start)
+
         return ret, ctx, ctx.differentiable
 
     def __str__(self) -> str:
@@ -361,35 +373,31 @@ class LogSoftmax(CudaFunction):
     @staticmethod
     def forward(ctx, self: cp.ndarray, dim: int = 0) -> cp.ndarray:
         """Log softmax of a tensor."""
-        # TODO: Optimize this like the cpu backend
         ctx.save_forward_context(self)
         ctx.dim = dim
 
         # Shift the input for numerical stability
         x_max = self.max(axis=dim, keepdims=True)
-        # TODO: Handle nan values
         shifted_logits = self - x_max
-        log_softmax_output = shifted_logits - cp.log(
-            cp.sum(cp.exp(shifted_logits), axis=dim, keepdims=True)
-        )
+        
+        ctx.softmax_output = cp.exp(shifted_logits)
+        ctx.softmax_sum = cp.sum(ctx.softmax_output, axis=dim, keepdims=True)
+        log_softmax_output = shifted_logits - cp.log(ctx.softmax_sum)
+
         return log_softmax_output
 
     @staticmethod
     def backward(ctx, grad_output: cp.ndarray):
         """Backward pass for log softmax."""
-        (input,) = ctx.forward_context
         dim = ctx.dim
-
-        # Compute softmax
-        x_max = input.max(axis=dim, keepdims=True)
-        shifted_logits = input - x_max
-        softmax_output = cp.exp(shifted_logits) / cp.sum(
-            cp.exp(shifted_logits), axis=dim, keepdims=True
-        )
+        
+        softmax_output = ctx.softmax_output / ctx.softmax_sum
 
         # Compute gradient
-        grad_input = grad_output - softmax_output * cp.sum(
-            grad_output, axis=dim, keepdims=True
+        grad_input = cp.subtract(
+            grad_output,
+            softmax_output * cp.sum(grad_output, axis=dim, keepdims=True),
+            out=grad_output
         )
 
         return grad_input
@@ -496,16 +504,9 @@ class Take(CudaFunction):
     def backward(ctx, grad_output: cp.ndarray):
         input, indices = ctx.forward_context
         grad_input = cp.zeros_like(input, dtype=cp.float32)
-
-        # TODO: Should we be concerned if indices is a memoryview?
-        if isinstance(indices, memoryview):
-            indices = indices.tolist()
-
-        # Iterate over each index and add the corresponding gradient
-        for idx, grad in zip(indices, grad_output):
-            grad_input[idx] += grad
-
+        cpx.scatter_add(grad_input, indices, grad_output)
         return grad_input
+
 
 class Dropout(CudaFunction):
 

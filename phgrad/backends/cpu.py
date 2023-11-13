@@ -13,11 +13,14 @@ All functions operate with numpy arrays. Therefore all function signatures
 and return types are defined as numpy arrays. 
 """
 
+import time
 from typing import Any, List, Tuple, Optional, Type, Union
 
 from functools import partial
 
 import numpy as np
+
+from .. import debug
 
 BackendTensor = np.ndarray
 
@@ -70,8 +73,16 @@ class CPUFunction:
                 passing_args.append(t.data)
             else:
                 passing_args.append(t)
+        
+        if debug.DEBUG == 1:
+            debug.func_calls[str(op_function)] += 1
+            time_start = time.time()
 
         ret = op_function.forward(ctx, *passing_args, **kwargs)  # type: ignore
+        
+        if debug.DEBUG == 1:
+            debug.forward_time[str(op_function)] += (time.time() - time_start)
+
         return ret, ctx, ctx.differentiable
 
     def __str__(self) -> str:
