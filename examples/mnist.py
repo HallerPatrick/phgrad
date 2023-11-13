@@ -2,7 +2,6 @@ import os
 import sys
 import time
 import numpy as np
-# import matplotlib.pyplot as plt
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -43,7 +42,7 @@ class MNIST():
         start_time = time.time()
         batch_size = 64
         for i in range(0, len(self.X_train), batch_size):
-            dataset_loader.append((Tensor(self.X_train[i : i + batch_size], device=device), Tensor(np.argmax(self.Y_train[i : i + batch_size], axis=1), device=device)))
+            dataset_loader.append((Tensor(self.X_train[i : i + batch_size].astype(np.float32), device=device), Tensor(np.argmax(self.Y_train[i : i + batch_size].astype(np.float32), axis=1), device=device)))
         end_time = time.time()
         print(f"Preprocess Time: {end_time - start_time:.2f} seconds")
 

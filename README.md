@@ -13,7 +13,7 @@ The goal is to optimize the library for performance and add more features. I wil
 be usable in NLP tasks.
 
 I will try to keep the API as close as possible to [PyTorch](https://pytorch.org/). A goal is to
-provide CUDA support, while keeping the dependency list as small as possible. (Currently only numpy).
+provide CUDA support, while keeping the dependency list as small as possible. (Currently only numpy, and now cupy).
 
 The [example](./examples) folder will contain some examples of how to use the library.
 
@@ -25,17 +25,22 @@ The [example](./examples) folder will contain some examples of how to use the li
 from phgrad.engine import Tensor
 from phgrad.nn import Linear, Module
 
+# We now have cuda support!
+device = "cuda"
+
 class Classifier(Module):
     def __init__(self):
-        self.l1 = Linear(784, 64, bias=True)
-        self.l2 = Linear(64, 2, bias=True)
+        self.l1 = Linear(784, 64, bias=True, device=device)
+        self.l2 = Linear(64, 2, bias=True, device=device)
 
     def forward(self, x: Tensor):
         x = self.l2(self.l1(x).relu())
-        return x.log_softmax()
+        # LogSoftmax is also a custom cuda kernel
+        # 🚀 Wow, blazingly fast!
+        return x.log_softmax(dim=-1)
 
 model = Classifier()
-x = Tensor(np.random.randn(32, 784))
+x = Tensor(np.random.randn(32, 784), device=device)
 y = model(x)
 y.backward()
 
