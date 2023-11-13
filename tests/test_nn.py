@@ -7,6 +7,7 @@ from utils import requires_torch
 from phgrad.engine import Tensor
 from phgrad.nn import Linear, MLP, Dropout, Module, Embedding
 from phgrad.optim import SGD
+from phgrad import types
 
 
 class TestModule(unittest.TestCase):
@@ -269,6 +270,9 @@ class TestEmbedding(unittest.TestCase):
         embedding = Embedding(10, 5)
         for _ in range(10):
             input = np.random.randint(0, 10, size=(100,))
-            result = embedding(Tensor(input))
+            t = Tensor(input, dtype=types.int64)
+            print(">>")
+            print(t.data.dtype)
+            result = embedding(t)
             self.assertEqual(result.data.shape, (100, 5))
 

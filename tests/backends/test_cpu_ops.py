@@ -226,11 +226,11 @@ class TestCat(unittest.TestCase):
     def test_cat(self):
         t1, t2 = Tensor(np.array([0.1, 0.2])), Tensor(np.array([0.3, 0.4]))
         t3 = t1.cat((t2, ))
-        np.testing.assert_equal(t3.data, np.array([0.1, 0.2, 0.3, 0.4]))
+        np.testing.assert_equal(t3.data, np.array([0.1, 0.2, 0.3, 0.4], dtype=np.float32))
 
     def test_cat_dim1(self):
         t1, t2 = Tensor(np.array([[0.1, 0.2], [0.3, 0.4]])), Tensor(np.array([[0.5, 0.6], [0.7, 0.8]]))
         t3 = t1.cat((t2,), dim=1)
-        np.testing.assert_equal(t3.data, np.array([[0.1, 0.2, 0.5, 0.6], [0.3, 0.4, 0.7, 0.8]]))
+        np.testing.assert_equal(t3.data, np.array([[0.1, 0.2, 0.5, 0.6], [0.3, 0.4, 0.7, 0.8]], dtype=np.float32))
 
 

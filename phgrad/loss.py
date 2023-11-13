@@ -1,6 +1,7 @@
 import numpy as np
 
 from .engine import Tensor
+from . import types
 
 
 def nllloss(inputs: Tensor, targets: Tensor, reduce="mean"):
@@ -26,7 +27,7 @@ def nllloss(inputs: Tensor, targets: Tensor, reduce="mean"):
 
     num_classes = inputs_np.shape[1]
     # TODO: Add arange to tensor
-    indices = Tensor(np.arange(len(targets_np)) * num_classes + targets_np, requires_grad=False, device=inputs.device)
+    indices = Tensor(np.arange(len(targets_np)) * num_classes + targets_np, requires_grad=False, device=inputs.device, dtype=types.int64)
 
     inputs = inputs.reshape(-1)
     our_log_probs = inputs.take(indices)

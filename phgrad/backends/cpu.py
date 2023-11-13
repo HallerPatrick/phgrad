@@ -21,15 +21,20 @@ from functools import partial
 import numpy as np
 
 from .. import debug
+# from ..types import DType, _DType
+from .. import types
 
 BackendTensor = np.ndarray
 
 
-def init_data(data: Any):
+def init_data(data: Any, type: types.DType) -> BackendTensor:
+    backend_type = to_backend_type(type)
     if isinstance(data, np.ndarray):
-        return data
+        if data.dtype == backend_type:
+            return data
+        return data.astype(backend_type)
     try:
-        data = np.array(data)
+        data = np.array(data, dtype=backend_type)
     except Exception as error:
         raise ValueError(f"Cannot convert {type(data)} to CPU tensor (numpy). {error}")
 
@@ -43,6 +48,27 @@ def numpy(data: BackendTensor) -> BackendTensor:
 
 def to_dtype(data: BackendTensor, dtype: Type) -> BackendTensor:
     return data.astype(dtype)
+
+def to_backend_type(frontend_type: types.DType) -> np.dtype:
+    match frontend_type:
+        case types.bool:
+            return bool
+        case types.float32:
+            return np.float32
+        case types.float64:
+            return np.float64
+        case types.int8:
+            return np.int8
+        case types.uint8:
+            return np.uint8
+        case types.int16:
+            return np.int16
+        case types.int32:
+            return np.int32
+        case types.int64:
+            return np.int64
+        case _:  # noqa
+            raise ValueError(f"Unknown dtype {frontend_type}")
 
 class CPUFunction:
     """Our CPU backend. Mostly based on numpy.
@@ -483,7 +509,8 @@ class Flatten(CPUFunction):
     @staticmethod
     def forward(ctx, self: np.ndarray) -> np.ndarray:
         ctx.save_forward_context(self)
-        return np.reshape(self, (self.shape[0], -1))
+        res =  np.reshape(self, (self.shape[0], -1))
+        return res
 
     @staticmethod
     def backward(ctx, grad_output: np.ndarray):
@@ -500,6 +527,8 @@ class Take(CPUFunction):
     @staticmethod
     def forward(ctx, self: np.ndarray, indices: np.ndarray) -> np.ndarray:
         """Take elements from a tensor using indices."""
+
+        assert indices.dtype == np.int64 or indices.dtype == bool, f"Indices must be of type int64 or bool, got {indices.dtype}"
         ctx.save_forward_context(self)
         ctx.indices = indices
         # Assume indices are for the first dimension

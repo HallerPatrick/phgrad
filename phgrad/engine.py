@@ -1,23 +1,24 @@
 import time
-from typing import Optional, Tuple, Union, Type
+from typing import Any, Optional, Tuple, Union, Type
 
 import numpy as np
 
 from phgrad.debug import DEBUG, backward_time
 from phgrad.debug import tensor_creations
 from phgrad.backends import backend_from_device
+from phgrad import types
 
 TensorOrScalar = Union["Tensor", float, int]
 
 class Tensor:
-    __slots__ = ("data", "grad", "requires_grad", "ctx", "backend", "device")
+    __slots__ = ("data", "grad", "requires_grad", "ctx", "backend", "device", "dtype")
 
     def __init__(
         self,
-        value: np.ndarray,
+        value: Any,
         requires_grad=True,
         device: Union[str, int] = "cpu",
-        # TODO: Support passing dtype
+        dtype: types.DType = types.float32,
         _backend=None,
     ):
         if _backend is None:
@@ -31,7 +32,8 @@ class Tensor:
         if DEBUG == 1:
             tensor_creations[device] += 1
         
-        self.data = self.backend.init_data(value)
+        self.dtype = dtype
+        self.data = self.backend.init_data(value, self.dtype)
         self.grad = None
         self.requires_grad: bool = requires_grad
 
@@ -50,10 +52,10 @@ class Tensor:
         """Return the shape of the tensor."""
         return self.data.shape
 
-    @property
-    def dtype(self):
-        """Return the dtype of the tensor."""
-        return self.data.dtype
+    # @property
+    # def dtype(self):
+    #     """Return the dtype of the tensor."""
+    #     return self.data.dtype
 
     def backward(self, allow_fill=True):
         """Compute the gradient of this tensor.

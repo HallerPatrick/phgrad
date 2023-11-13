@@ -5,6 +5,7 @@ import torch
 
 from phgrad.loss import nllloss, cross_entropy
 from phgrad.engine import Tensor as Tensor
+from phgrad import types
 
 
 class TestLoss(unittest.TestCase):
@@ -13,7 +14,7 @@ class TestLoss(unittest.TestCase):
         inputs = Tensor(
             np.array([[np.log(0.1), np.log(0.9)]])
         )  # Log probabilities; correct class is class 1
-        targets = Tensor(np.array([1]))
+        targets = Tensor(np.array([1]), dtype=types.int64)
         loss = nllloss(inputs, targets)
         self.assertAlmostEqual(
             loss.first_item, -np.log(0.9), places=5
@@ -24,7 +25,7 @@ class TestLoss(unittest.TestCase):
         inputs = Tensor(
             np.array([[np.log(0.9), np.log(0.1)]])
         )  # Log probabilities; correct class is class 1
-        targets = Tensor(np.array([1]))
+        targets = Tensor(np.array([1]), dtype=types.int64)
         loss = nllloss(inputs, targets)
         self.assertGreater(
             loss.first_item, -np.log(0.9)
@@ -38,10 +39,9 @@ class TestLoss(unittest.TestCase):
                 dtype=np.float32,
             )
         )  # Log probabilities; correct classes are 1 and 0
-        targets = Tensor(np.array([1, 0]))
+        targets = Tensor(np.array([1, 0]), dtype=types.int64)
 
         # Mean reduction
-        print(inputs.shape, targets.shape)
         mean_loss = nllloss(inputs, targets, reduce="mean")
         expected_mean_loss = (-np.log(0.9) - np.log(0.8)) / 2
         self.assertAlmostEqual(mean_loss.first_item, expected_mean_loss, places=5)
@@ -133,7 +133,7 @@ class TestLoss(unittest.TestCase):
             requires_grad=True,
         )
 
-        targets = Tensor(np.array([5, 0]))
+        targets = Tensor(np.array([5, 0]), dtype=types.int64)
 
         loss = nllloss(inputs, targets)
         loss.backward()  # Compute gradients

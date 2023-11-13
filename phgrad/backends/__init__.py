@@ -25,11 +25,11 @@ def apply_tensorfication(
 
         if isinstance(args[0], tensor_type):
             tensor = tensor_type(
-                fn_result, requires_grad=args[0].requires_grad, _backend=args[0].backend
+                fn_result, requires_grad=args[0].requires_grad, _backend=args[0].backend, dtype=args[0].dtype
             )
         elif len(args) > 1 and isinstance(args[1], tensor_type):
             tensor = tensor_type(
-                fn_result, requires_grad=args[1].requires_grad, _backend=args[1].backend
+                fn_result, requires_grad=args[1].requires_grad, _backend=args[1].backend, dtype=args[1].dtype
             )
         else:
             # TODO: Do we need check for is_differentiable if we passed another tensor to op?

@@ -18,6 +18,7 @@ except ImportError:
 import numpy as np
 
 from .. import debug
+from .. import types
 
 BackendTensor = cp.ndarray
 
@@ -49,11 +50,15 @@ def _load_cuda_kernels(filename: str, *kernels: Tuple[str]) -> Any:
     return tuple(cp.RawKernel(cuda_code, kernel) for kernel in kernels)
 
 
-def init_data(data: Any):
+def init_data(data: Any, dtype: Type) -> BackendTensor:
+    backend_type = to_backend_type(dtype)
+
     if isinstance(data, cp.ndarray):
-        return data
+        if data.dtype == backend_type:
+            return data
+        return data.astype(backend_type)
     try:
-        data = cp.array(data)
+        data = cp.array(data, dtype=backend_type)
     except Exception as error:
         raise ValueError(f"Cannot convert {type(data)} to GPU tensor (cupy). {error}")
     
@@ -67,6 +72,28 @@ def to_dtype(tensor: BackendTensor, dtype: Type) -> BackendTensor:
 
 def numpy(tensor: BackendTensor) -> np.ndarray:
     return cp.asnumpy(tensor)
+
+def to_backend_type(frontend_type: types.DType) -> cp.dtype:
+    match frontend_type:
+        case types.bool:
+            return cp.bool
+        case types.float32:
+            return cp.float32
+        case types.float64:
+            return cp.float64
+        case types.int8:
+            return cp.int8
+        case types.uint8:
+            return cp.uint8
+        case types.int16:
+            return cp.int16
+        case types.int32:
+            return cp.int32
+        case types.int64:
+            return cp.int64
+        case _:  # noqa
+            raise ValueError(f"Unknown dtype {frontend_type}")
+
 
 class CudaFunction:
     """Our GPU (CUDA) backend. Mostly based on cupy"""
