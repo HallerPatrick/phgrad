@@ -130,6 +130,9 @@ class Tensor:
         torch_tensor.requires_grad = requires_grad
         return torch_tensor
 
+    def numpy(self) -> np.ndarray:
+        return self.backend.numpy(self.data)
+
     def to(self, device: Union[str, int], in_place=False) -> "Tensor":
 
         if self.device == device:

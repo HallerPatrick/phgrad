@@ -35,6 +35,8 @@ def copy(tensor: BackendTensor) -> BackendTensor:
 def to_dtype(tensor: BackendTensor, dtype: Type) -> BackendTensor:
     return tensor.astype(dtype)
 
+def numpy(tensor: BackendTensor) -> np.ndarray:
+    return cp.asnumpy(tensor)
 
 class CudaFunction:
     """Our GPU (CUDA) backend. Mostly based on cupy"""
@@ -106,6 +108,8 @@ def unbroadcast(grad, original_shape):
     Returns:
         cp.ndarray: The gradient tensor reduced to the original tensor shape.
     """
+    if debug.DEBUG == 1:
+        start_time = time.time()
     # First, we need to expand the original shape to the same number of dimensions as the grad
     # by adding singleton dimensions at the beginning
     shape_diff = len(grad.shape) - len(original_shape)
@@ -125,6 +129,10 @@ def unbroadcast(grad, original_shape):
     # Remove singleton dimensions that were added to match the original shape
     if shape_diff > 0:
         grad = grad.reshape(original_shape)
+    
+    if debug.DEBUG == 1:
+        end_time = time.time()
+        debug.backward_time["unbroadcast"] += (end_time - start_time)
 
     return grad
 
@@ -297,26 +305,15 @@ class Mean(CudaFunction):
         """Mean of all elements in a tensor."""
         ctx.save_forward_context(self)
         ctx.dim = dim
+        ctx.input_size = self.size
+        return self.mean(axis=dim, keepdims=True)
 
-        if dim is None:
-            result = cp.array([self.mean()])
-        else:
-            result = self.mean(axis=dim, keepdims=True)
-
-        return result
 
     @staticmethod
     def backward(ctx, grad_output: cp.ndarray):
         (input_tensor,) = ctx.forward_context
-        dim = ctx.dim
-
-        if dim is not None:
-            shape = cp.array(input_tensor.shape)
-            shape[dim] = 1
-            grad = grad_output / cp.prod(shape)
-            return cp.broadcast_to(grad, input_tensor.shape)
-
-        return grad_output * cp.ones_like(input_tensor) / len(input_tensor)
+        grad_output = grad_output / ctx.input_size
+        return cp.broadcast_to(grad_output, input_tensor.shape)
 
 
 class Max(CudaFunction):
@@ -615,6 +612,8 @@ def attach_op(function: Type[CudaFunction]):
 funcs = {
     "init_data": init_data,
     "copy": copy,
+    "numpy": numpy,
+    "to_dtype": to_dtype,
 }
 
 ops_map = {

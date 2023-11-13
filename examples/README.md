@@ -24,7 +24,13 @@ Note: Looks like main compute time is not wasted on inefficient logsoftmax, but 
     -> Optimized, now 18 secs in total
 * Adam(GPU): 50.77 sec
 
+SGD(CPU) Hidden Size: 64 -> 10.63 sec
+SGD(CPU) Hidden Size: 256 -> 21.36 sec
+SGD(CPU) Hidden Size: 1024 -> 86.20 sec
 
+SGD(GPU) Hidden Size: 64 -> 18.41 sec
+SGD(GPU) Hidden Size: 256 -> 19.62 sec
+SGD(GPU) Hidden Size: 1024 -> 27.05 sec
 
 ==== Summary ====
 

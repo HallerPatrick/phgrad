@@ -13,7 +13,7 @@ class Linear(Module):
         self.biases: Optional[Tensor] = None
 
         if bias:
-            self.biases = Tensor(he_initialization((output_dim,)), device)
+            self.biases = Tensor(he_initialization((output_dim,)), device=device)
 
     def forward(self, t: Tensor) -> Tensor:
         if self.biases is None:

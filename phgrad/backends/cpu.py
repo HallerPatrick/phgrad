@@ -35,6 +35,14 @@ def init_data(data: Any):
 
     return data
 
+def copy(data: BackendTensor) -> BackendTensor:
+    return data.copy()
+
+def numpy(data: BackendTensor) -> BackendTensor:
+    return data
+
+def to_dtype(data: BackendTensor, dtype: Type) -> BackendTensor:
+    return data.astype(dtype)
 
 class CPUFunction:
     """Our CPU backend. Mostly based on numpy.
@@ -300,12 +308,12 @@ class Mean(CPUFunction):
         ctx.save_forward_context(self)
         ctx.dim = dim
 
-        if dim is None:
-            result = np.array([self.mean()])
-        else:
-            result = self.mean(axis=dim, keepdims=True)
-
-        return result
+        # if dim is None:
+        #     result = np.array([self.mean()])
+        # else:
+        #     result = self.mean(axis=dim, keepdims=True)
+        #
+        return self.mean(axis=dim, keepdims=True)
 
     @staticmethod
     def backward(ctx, grad_output: np.ndarray):
@@ -616,6 +624,8 @@ def attach_op(function: Type[CPUFunction]):
 
 funcs = {
     "init_data": init_data,
+    "copy": copy,
+    "numpy": numpy,
 }
 
 ops_map = {
