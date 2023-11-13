@@ -17,6 +17,7 @@ class Tensor:
         value: np.ndarray,
         requires_grad=True,
         device: Union[str, int] = "cpu",
+        # TODO: Support passing dtype
         _backend=None,
     ):
         if _backend is None:
@@ -74,7 +75,10 @@ class Tensor:
         
         if DEBUG == 1:
             start_time = time.time()
-            grads = self.ctx.backward(self.ctx, self.grad)
+
+        grads = self.ctx.backward(self.ctx, self.grad)
+
+        if DEBUG == 1:
             backward_time[str(self.ctx)] += (time.time() - start_time)
         
         if len(self.ctx.prev) == 1 or (not isinstance(grads, tuple)):

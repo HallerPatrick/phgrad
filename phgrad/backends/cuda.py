@@ -5,6 +5,8 @@ This is more or less a copy of the CPU backend but uses cupy instead of numpy.
 import time
 from typing import Any, List, Tuple, Optional, Type, Union
 
+from pathlib import Path
+
 from functools import partial
 
 try:
@@ -18,6 +20,34 @@ import numpy as np
 from .. import debug
 
 BackendTensor = cp.ndarray
+
+def _load_cuda_kernels(filename: str, *kernels: Tuple[str]) -> Any:
+    """Load one or more CUDA kernels from a file and compile it.
+    All cuda kernels reside in the `cuda_kernels` folder at the root of the
+    project.
+
+    Args:
+        filename (str): The name of the file containing the CUDA kernels.
+        kernels (Tuple[str]): The names of the kernels to load.
+
+    Returns:
+        Any: The compiled CUDA kernel.
+
+    Note:
+        CuPy caches the compiled kernels, but we still do the IO here. So maybe we 
+        should at least apply a cache to this function.
+    """
+    # TODO: There is probably a better way to do this
+    cuda_file = Path(__file__).parent.parent.parent / "cuda_kernels" / (filename + ".cu")
+    if not cuda_file.exists():
+        raise FileNotFoundError(f"Could not find CUDA file {cuda_file}")
+
+    with open(cuda_file, "r") as f:
+        cuda_code = f.read()
+
+    # Compile the CUDA kernels, and return
+    return tuple(cp.RawKernel(cuda_code, kernel) for kernel in kernels)
+
 
 def init_data(data: Any):
     if isinstance(data, cp.ndarray):
@@ -367,8 +397,31 @@ class Log(CudaFunction):
 
 
 class LogSoftmax(CudaFunction):
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.forward_kernel, self.backward_kernel = _load_cuda_kernels("log_softmax", "log_softmax_forward", "log_softmax_backward")
+
+        # # Load the CUDA kernel
+        # with open(os.path.join(os.path.dirname(__file__), 'kernels/log_softmax.cu'), 'r') as f:
+        #     kernel_code = f.read()
+        #     self.forward_kernel = cp.RawKernel(kernel_code, 'log_softmax_forward')
+        #     self.backward_kernel = cp.RawKernel(kernel_code, 'log_softmax_backward')
+
     @staticmethod
     def forward(ctx, self: cp.ndarray, dim: int = 0) -> cp.ndarray:
+        if dim != -1 and dim != 1:
+            raise NotImplementedError("Kernel only supports dim=-1 or dim=1 for 2D tensors.")
+        ctx.save_forward_context(self)
+        rows, cols = self.shape
+        output = cp.empty_like(self)
+        threads_per_block = 256
+        blocks_per_grid = (rows * cols + threads_per_block - 1) // threads_per_block
+        ctx.forward_kernel((blocks_per_grid,), (threads_per_block,), (output, self, rows, cols))
+        return output
+
+    @staticmethod
+    def _forward(ctx, self: cp.ndarray, dim: int = 0) -> cp.ndarray:
         """Log softmax of a tensor."""
         ctx.save_forward_context(self)
         ctx.dim = dim
@@ -385,9 +438,22 @@ class LogSoftmax(CudaFunction):
 
     @staticmethod
     def backward(ctx, grad_output: cp.ndarray):
+        # TODO: Maybe we can cache the softmax output and sum from the forward pass
+        input_tensor = ctx.forward_context[0]
+        rows, cols = input_tensor.shape
+        grad_input = cp.empty_like(input_tensor)
+
+        threads_per_block = 256
+        blocks_per_grid = (rows * cols + threads_per_block - 1) // threads_per_block
+        ctx.backward_kernel((blocks_per_grid,), (threads_per_block,), (grad_input, grad_output, input_tensor, rows, cols))
+
+        return grad_input
+
+    @staticmethod
+    def _backward(ctx, grad_output: cp.ndarray):
         """Backward pass for log softmax."""
         dim = ctx.dim
-        
+
         softmax_output = ctx.softmax_output / ctx.softmax_sum
 
         # Compute gradient

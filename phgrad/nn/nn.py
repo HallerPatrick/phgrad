@@ -1,5 +1,7 @@
 from typing import Optional
 
+import numpy as np
+
 from phgrad.engine import Tensor
 from phgrad.init import he_initialization
 
@@ -8,12 +10,12 @@ from .base import Module
 class Linear(Module):
     def __init__(self, inp_dim: int, output_dim: int, bias: bool = True, device="cpu"):
         super().__init__(device=device)
-        self.weights = Tensor(he_initialization((output_dim, inp_dim)), device=device)
+        self.weights = Tensor(he_initialization((output_dim, inp_dim)).astype(np.float32), device=device)
 
         self.biases: Optional[Tensor] = None
 
         if bias:
-            self.biases = Tensor(he_initialization((output_dim,)), device=device)
+            self.biases = Tensor(he_initialization((output_dim,)).astype(np.float32), device=device)
 
     def forward(self, t: Tensor) -> Tensor:
         if self.biases is None:

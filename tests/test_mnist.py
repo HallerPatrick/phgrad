@@ -2,7 +2,7 @@ import unittest
 import pytest
 import numpy as np
 
-from utils import requires_torch, load_mnist
+from utils import requires_torch, load_mnist, requires_cupy
 
 from phgrad.engine import Tensor
 from phgrad.nn import MLP
@@ -31,8 +31,8 @@ class TestMNIST(unittest.TestCase):
                 x = Tensor(self.X_train[i : i + 32])
                 y = Tensor(np.argmax(self.Y_train[i : i + 32], axis=1))
                 y_pred = mlp(x)
-                y_pred = y_pred.log_softmax(dim=1)
-                loss = nllloss(y_pred, y, reduce="mean")
+                y_pred_log_softmax = y_pred.log_softmax(dim=1)
+                loss = nllloss(y_pred_log_softmax, y, reduce="mean")
                 loss.backward()
                 optimizer.step()
 
@@ -85,3 +85,46 @@ class TestMNIST(unittest.TestCase):
             .mean()
         )
         print(f"Accuracy: {accuracy}")
+
+@pytest.mark.slow
+@requires_cupy
+class TestMNISTCUDA(unittest.TestCase):
+    def setUp(self) -> None:
+        X_train, Y_train, X_test, Y_test = load_mnist()
+        self.X_train = X_train.reshape(-1, 28 * 28) / 255.0
+        self.X_test = X_test.reshape(-1, 28 * 28) / 255.0
+        self.Y_train = np.eye(10)[Y_train.reshape(-1)]
+        self.Y_test = np.eye(10)[Y_test.reshape(-1)]
+        self.X_train = self.X_train.astype(np.float32)
+        self.X_test = self.X_test.astype(np.float32)
+        self.Y_train = self.Y_train.astype(np.float32)
+        self.Y_test = self.Y_test.astype(np.float32)
+
+    # @unittest.skip("Not implemented")
+    def test_mlp(self):
+        mlp = MLP(784, 64, 10, bias=False, device="cuda")
+        optimizer = SGD(mlp.parameters(), lr=0.01)
+
+        current_accuracy = 0
+        for epoch in range(3):
+            for i in range(0, len(self.X_train), 32):
+                optimizer.zero_grad()
+                x = Tensor(self.X_train[i : i + 32], device="cuda")
+                y = Tensor(np.argmax(self.Y_train[i : i + 32], axis=1), device="cuda")
+                y_pred = mlp(x)
+                y_pred_log_softmax = y_pred.log_softmax(dim=1)
+                y_pred_log_softmax = y_pred.log_softmax(dim=1)
+                loss = nllloss(y_pred_log_softmax, y, reduce="mean")
+                loss.backward()
+                optimizer.step()
+
+            y_pred = mlp(Tensor(self.X_test, device="cuda"))
+            y_pred = np.argmax(y_pred.data, axis=1)
+
+            accuracy = (y_pred.get() == self.Y_test.argmax(axis=1)).mean()
+            print(f"Epoch {epoch}: {accuracy:.2f}")
+
+            # Stupid test, but good for regression
+            self.assertGreater(accuracy, current_accuracy)
+            current_accuracy = accuracy
+
