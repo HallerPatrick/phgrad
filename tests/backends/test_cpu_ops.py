@@ -1,9 +1,11 @@
 import unittest
 
 import numpy as np
+from phgrad import types
 
 from utils import requires_torch
 
+from phgrad import futils
 from phgrad.engine import Tensor as Tensor
 from phgrad.backends.cpu import LogSoftmax
 
@@ -232,5 +234,28 @@ class TestCat(unittest.TestCase):
         t1, t2 = Tensor(np.array([[0.1, 0.2], [0.3, 0.4]])), Tensor(np.array([[0.5, 0.6], [0.7, 0.8]]))
         t3 = t1.cat((t2,), dim=1)
         np.testing.assert_equal(t3.data, np.array([[0.1, 0.2, 0.5, 0.6], [0.3, 0.4, 0.7, 0.8]], dtype=np.float32))
+
+
+
+class TestScatterAdd(unittest.TestCase):
+
+    def test_scatter(self):
+        t1 = Tensor(np.zeros((4, 4)))
+
+        indices = Tensor([[0], [1], [3], [2]], dtype=types.int64)
+        print(indices.shape)
+
+        t1.scatter_add(indices, 1, axis=1)
+        print(t1.data)
+
+
+    def test_one_hot(self):
+
+        num_classes = 10
+
+        idxes = Tensor([[1], [2], [3], [4]], dtype=types.int64)
+        futils.one_hot(idxes, num_classes)
+
+
 
 

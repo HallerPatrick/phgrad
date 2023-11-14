@@ -652,11 +652,14 @@ def zeros(shape: Tuple[int]) -> np.ndarray:
 def attach_op(function: Type[CPUFunction]):
     return partial(function.apply, function)
 
+def scatter_add(tensor: BackendTensor, indices: BackendTensor, values: BackendTensor, axis: Optional[int] = None):
+    return np.put_along_axis(tensor, indices, values, axis)
 
 funcs = {
     "init_data": init_data,
     "copy": copy,
     "numpy": numpy,
+    "scatter_add": scatter_add
 }
 
 ops_map = {

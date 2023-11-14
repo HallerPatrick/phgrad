@@ -278,7 +278,7 @@ class Tensor:
         )
 
     @classmethod
-    def zeroes(
+    def zeros(
         cls: Type["Tensor"],
         shape: Tuple[int],
         requires_grad: bool = False,
@@ -286,7 +286,7 @@ class Tensor:
     ):
         backend = backend_from_device(device, Tensor)
         return cls(
-            backend.zeroes(*shape),
+            backend.zeros(shape),
             requires_grad=requires_grad,
             device=device,
             _backend=backend,
@@ -306,3 +306,8 @@ class Tensor:
             device=device,
             _backend=backend,
         )
+
+
+    def scatter_add(self, indices: "Tensor", values: TensorOrScalar, axis: Optional[int] = None) -> "Tensor":
+        """This is inplace"""
+        self.backend.scatter_add(self.data, indices.data, values, axis)
