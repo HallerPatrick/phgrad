@@ -21,8 +21,6 @@ import pandas as pd
 from datasets import load_dataset, Dataset
 from tqdm import tqdm
 import torch
-from torchviz import make_dot
-from graphviz import Source
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -30,7 +28,6 @@ from phgrad.engine import Tensor
 from phgrad.nn import Linear, Module
 from phgrad.loss import nllloss
 from phgrad.optim import SGD, l1_regularization
-from phgrad.fun import argmax
 
 
 class BOWClassifier(Module):
@@ -125,7 +122,7 @@ def main():
     torch_optimizer = torch.optim.SGD(torch_classifier.parameters(), lr=0.01)
 
     batch_size = 2
-    TORCH = True
+    TORCH = False
 
     for epoch in range(10):
         print(f"Epoch {epoch}")
@@ -196,18 +193,18 @@ def main():
                 loss.backward()
                 optimizer.step()
 
-                logits = log_probs.softmax()
-                pred_idxs = argmax(logits, dim=1)
+                # logits = log_probs.softmax()
+                # pred_idxs = argmax(logits, dim=1)
 
-                target_idxs = np.squeeze(target.data, axis=1)
-                batch_correct = np.sum((pred_idxs == target_idxs))
-                total_correct += batch_correct
-                total_samples += batch_size
+                # target_idxs = np.squeeze(target.data, axis=1)
+                # batch_correct = np.sum((pred_idxs == target_idxs))
+                # total_correct += batch_correct
+                # total_samples += batch_size
 
-                accuracy = total_correct / total_samples
-                loss = loss.data[0]
+                # accuracy = total_correct / total_samples
+                # loss = loss.data[0]
 
-                pbar.set_description(f"Loss: {loss:5.5f}, Accuracy: {accuracy:.2f}")
+                # pbar.set_description(f"Loss: {loss:5.5f}, Accuracy: {accuracy:.2f}")
 
                 currrent_batch_source = []
                 currrent_batch_target = []

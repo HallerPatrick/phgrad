@@ -529,7 +529,6 @@ class Take(CPUFunction):
     @staticmethod
     def forward(ctx, self: np.ndarray, indices: np.ndarray) -> np.ndarray:
         """Take elements from a tensor using indices."""
-
         assert indices.dtype == np.int64 or indices.dtype == bool, f"Indices must be of type int64 or bool, got {indices.dtype}"
         ctx.save_forward_context(self)
         ctx.indices = indices
@@ -592,7 +591,15 @@ class Cat(CPUFunction):
 
     @staticmethod
     def backward(ctx, grad_output: np.ndarray):
-        grads = np.split(grad_output, np.cumsum(ctx.shapes)[:-1], axis=ctx.axis)
+
+        # grads = np.split(grad_output, np.cumsum(ctx.shapes)[:-1], axis=ctx.axis)
+        # return tuple(grads)
+    
+        axis = ctx.axis
+        # Calculate the indices for splitting
+        split_sizes = [shape[axis] for shape in ctx.shapes]
+        split_indices = np.cumsum(split_sizes)[:-1]
+        grads = np.split(grad_output, split_indices, axis=axis)
         return tuple(grads)
 
 

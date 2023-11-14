@@ -4,6 +4,7 @@ import numpy as np
 
 from phgrad.engine import Tensor
 from phgrad.init import he_initialization
+from phgrad.futils import one_hot
 
 from .base import Module
 
@@ -49,14 +50,10 @@ class Dropout(Module):
 
 class Embedding(Module):
 
-    def __init__(self, num_embeddings: int, embedding_dim: int):
+    def __init__(self, num_embeddings: int, embedding_dim: int, device="cpu"):
         super().__init__()
         self.embedding_dim = embedding_dim
-        self.embeddings = Tensor(he_initialization((num_embeddings, embedding_dim)))
+        self.embeddings = Tensor(he_initialization((num_embeddings, embedding_dim)), device=device)
 
     def forward(self, indexes: Tensor) -> Tensor:
-        dims = list(indexes.shape)
-        dims.append(self.embedding_dim)
-        flatten_indexes = indexes.flatten()
-        return self.embeddings.take(flatten_indexes).reshape(dims)
-
+        return self.embeddings.take(indexes)

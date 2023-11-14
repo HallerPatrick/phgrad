@@ -52,6 +52,11 @@ class Tensor:
         """Return the shape of the tensor."""
         return self.data.shape
 
+    @property 
+    def dims(self):
+        """Return the number of dimensions of the tensor."""
+        return len(self.shape)
+
     def backward(self, allow_fill=True):
         """Compute the gradient of this tensor.
 
@@ -82,16 +87,22 @@ class Tensor:
             grads = [grads]
 
         # Iterate over all previous tensors and set the gradient
-        # print("=== All Backward pass === ")
-        # for t, g in zip(self.ctx.prev, grads):
-        #     print(f"Shapes: input {t.shape}, grad {g.shape}, op={self.ctx}")
-        #     print("grads:", grads)
-        #     # print("Values:", t, g)
-        #     print("=======")
+        if DEBUG == 2:
+            print("=== All Backward pass === ")
+            for t, g in zip(self.ctx.prev, grads):
+                if not isinstance(t, tuple):
+                    t = (t,)
+                print(f"Shapes: input {[x.shape for x in t]}, grad {g.shape}, op={self.ctx}")
+                print("grads:", grads)
+                # print("Values:", t, g)
+                print("=======")
 
         for t, g in zip(self.ctx.prev, grads):
             if g is None:
                 continue
+            
+            if isinstance(t, tuple):
+                t = t[0]
 
             assert (
                 g.shape == t.data.shape

@@ -18,6 +18,53 @@ class TestReshape(unittest.TestCase):
         assert isinstance(tensor.data, np.ndarray)
         assert tensor.data.shape == (2, 3)
 
+@requires_torch
+class TestAddOperation(unittest.TestCase):
+    def test_add_forward(self):
+        """Test the forward pass of the addition operation."""
+        import torch
+        x_np = np.random.rand(2, 3)
+        y_np = np.random.rand(2, 3)
+
+        x = Tensor(x_np)
+        y = Tensor(y_np)
+
+        # Using your implementation
+        # result_np = Add.forward(None, x_np, y_np)
+        result = x + y
+
+        # Using PyTorch for comparison
+        x_torch = torch.tensor(x_np)
+        y_torch = torch.tensor(y_np)
+        result_torch = x_torch + y_torch
+
+        # Compare the outputs
+        np.testing.assert_allclose(result.data, result_torch.numpy(), atol=1e-6)
+
+    def test_add_backward(self):
+        """Test the backward pass of the addition operation."""
+        import torch
+        x_np = np.random.rand(2, 3)
+        y_np = np.random.rand(2, 3)
+        grad_output_np = np.random.rand(2, 3)
+
+        from phgrad.backends.cpu import Add
+
+        # Using your implementation
+        ctx = Add()
+        ctx.forward_context = (x_np, y_np)
+        grad_x_np, grad_y_np = Add.backward(ctx, grad_output_np)
+
+        # Using PyTorch for comparison
+        x_torch = torch.tensor(x_np, requires_grad=True)
+        y_torch = torch.tensor(y_np, requires_grad=True)
+        output_torch = x_torch + y_torch
+        output_torch.backward(torch.tensor(grad_output_np))
+
+        # Compare the gradients
+        np.testing.assert_allclose(grad_x_np, x_torch.grad.numpy(), atol=1e-6)
+        np.testing.assert_allclose(grad_y_np, y_torch.grad.numpy(), atol=1e-6)
+
 
 class TestOps(unittest.TestCase):
     def test_add(self):
@@ -77,6 +124,7 @@ class TestOps(unittest.TestCase):
     @unittest.skip("Not implemented")
     def test_softmax_with_axis(self):
         import torch
+
         t1 = Tensor(np.array([[1, 2, -3], [4, 5, 6]]))
         t2 = t1.softmax()
 
@@ -223,39 +271,81 @@ class TestLogSoftmax(unittest.TestCase):
 
         np.testing.assert_almost_equal(grad_np, input_torch.grad.numpy(), decimal=5)
 
-class TestCat(unittest.TestCase):
 
+class TestCat(unittest.TestCase):
     def test_cat(self):
         t1, t2 = Tensor(np.array([0.1, 0.2])), Tensor(np.array([0.3, 0.4]))
-        t3 = t1.cat((t2, ))
-        np.testing.assert_equal(t3.data, np.array([0.1, 0.2, 0.3, 0.4], dtype=np.float32))
+        t3 = t1.cat((t2,))
+        np.testing.assert_equal(
+            t3.data, np.array([0.1, 0.2, 0.3, 0.4], dtype=np.float32)
+        )
 
     def test_cat_dim1(self):
-        t1, t2 = Tensor(np.array([[0.1, 0.2], [0.3, 0.4]])), Tensor(np.array([[0.5, 0.6], [0.7, 0.8]]))
+        t1, t2 = (
+            Tensor(np.array([[0.1, 0.2], [0.3, 0.4]])),
+            Tensor(np.array([[0.5, 0.6], [0.7, 0.8]])),
+        )
         t3 = t1.cat((t2,), dim=1)
-        np.testing.assert_equal(t3.data, np.array([[0.1, 0.2, 0.5, 0.6], [0.3, 0.4, 0.7, 0.8]], dtype=np.float32))
+        np.testing.assert_equal(
+            t3.data,
+            np.array([[0.1, 0.2, 0.5, 0.6], [0.3, 0.4, 0.7, 0.8]], dtype=np.float32),
+        )
 
+    def test_cat_backward(self):
+        t1, t2 = Tensor(np.array([0.1, 0.2])), Tensor(np.array([0.3, 0.4]))
+        t3 = t1.cat((t2,), dim=0)
+        t4 = t3.sum()
+        t4.backward()
+        np.testing.assert_equal(t1.grad, np.array([1, 1], dtype=np.float32))
+        np.testing.assert_equal(t2.grad, np.array([1, 1], dtype=np.float32))
 
 
 class TestScatterAdd(unittest.TestCase):
-
     def test_scatter(self):
         t1 = Tensor(np.zeros((4, 4)))
-
-        indices = Tensor([[0], [1], [3], [2]], dtype=types.int64)
-        print(indices.shape)
-
+        indices = Tensor([0, 1, 3, 2], dtype=types.int64).reshape((-1, 1))
         t1.scatter_add(indices, 1, axis=1)
-        print(t1.data)
-
+        np.testing.assert_equal(
+            t1.data,
+            np.array(
+                [[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 0, 1], [0, 0, 1, 0]],
+                dtype=np.float32,
+            ),
+        )
 
     def test_one_hot(self):
+        num_classes = 4
+        idxes = Tensor([0, 1, 2, 3], dtype=types.int64)
+        one_hot_encoding = futils.one_hot(idxes, num_classes)
 
-        num_classes = 10
+        expected_one_hot_encoding = np.eye(num_classes)
+        np.testing.assert_equal(one_hot_encoding.data, expected_one_hot_encoding)
 
-        idxes = Tensor([[1], [2], [3], [4]], dtype=types.int64)
-        futils.one_hot(idxes, num_classes)
+    def test_one_hot_no_num_classes(self):
+        # Infer num_classes from idxes
+        idxes = Tensor([0, 1, 2, 3], dtype=types.int64)
+        one_hot_encoding = futils.one_hot(idxes)
 
+        expected_one_hot_encoding = np.eye(4)
+        np.testing.assert_equal(one_hot_encoding.data, expected_one_hot_encoding)
 
+    @requires_torch
+    def test_one_hot_batched(self):
+        import torch
 
+        num_classes = 4
+        idxes = Tensor([[1, 2], [3, 3]], dtype=types.int64)
+        one_hot_encoding = futils.one_hot(idxes, num_classes)
 
+        idxes = torch.tensor(idxes.data)
+        print("torch", idxes.shape)
+
+        expected_one_hot_encoding = torch.nn.functional.one_hot(
+            idxes, num_classes
+        ).numpy()
+        np.testing.assert_equal(one_hot_encoding.data, expected_one_hot_encoding)
+
+        idxes = Tensor([[1, 2], [3, 3]], dtype=types.int64)
+        # Infer num_classes from idxes
+        one_hot_encoding = futils.one_hot(idxes)
+        np.testing.assert_equal(one_hot_encoding.data, expected_one_hot_encoding)
