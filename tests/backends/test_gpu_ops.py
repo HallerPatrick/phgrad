@@ -11,7 +11,7 @@ except ImportError:
 from utils import requires_torch, requires_cupy
 
 from phgrad.engine import Tensor as Tensor
-from phgrad.backends.cuda import LogSoftmax
+from phgrad.backends.cuda import LogSoftmax, Softmax
 
 def tensor_with_cuda(*args, **kwargs):
     return partial(Tensor, *args, **kwargs, device="cuda")
@@ -70,15 +70,24 @@ class TestOps(unittest.TestCase):
     def test_softmax(self):
         import torch
 
-        t1 = Tensor(np.array([1, 2, -3]))
-        t2 = t1.softmax()
+        t1 = Tensor(np.array([[1, 2, -3]]))
+        t2 = t1.softmax(dim=-1)
 
-        tt1 = torch.tensor([1, 2, -3], dtype=torch.float32)
-        tt2 = torch.nn.functional.softmax(tt1, dim=0)
+        tt1 = torch.tensor([[1, 2, -3]], dtype=torch.float32, requires_grad=True)
+        tt2 = torch.nn.functional.softmax(tt1, dim=-1)
+        
+        # t3 = t2.sum()
+        # t3.backward()
+        # tt3 = tt2.mean()
+        # print(tt3)
+        # print(tt3.shape)
+        # tt3.backward()
 
         assert isinstance(t2.data, cp.ndarray)
-        assert t2.data.shape == (3,)
+        assert t2.data.shape == (1, 3)
         assert np.allclose(t2.data, tt2.detach().numpy())
+        # assert np.allclose(t1.grad, tt1.grad.detach().numpy())
+
 
     @requires_torch
     @unittest.skip("Not implemented")
@@ -156,38 +165,6 @@ class TestOps(unittest.TestCase):
         )
         assert np.allclose(t2.grad, cp.eye(1))
 
-    # @requires_torch
-    # def test_log_softmax(self):
-    #     import torch
-    #
-    #     t1 = Tensor(np.array([[1, 2, -3]]))
-    #     print(t1.shape)
-    #     t2 = t1.log_softmax(dim=-1)
-    #
-    #     tt1 = torch.tensor([[1, 2, -3]], dtype=torch.float32)
-    #     tt2 = torch.nn.functional.log_softmax(tt1, dim=-1)
-    #
-    #     assert isinstance(t2.data, cp.ndarray)
-    #     assert t2.data.shape == (1, 3)
-    #     # assert np.allclose(t2.data, tt2.detach().numpy())
-    #
-    #     t3 = t2.sum()
-    #     tt3 = tt2.sum()
-    #
-    #     t3.backward()
-    #     tt3.backward()
-    #
-    #     assert np.allclose(t2.grad, tt2.grad.detach().numpy())
-    #
-    #
-    # def test_log_softmax_backward(self):
-    #     t1 = Tensor(np.array([[1.0, 2.0, 3.0]]))
-    #     t2 = t1.log_softmax(dim=-1).sum()
-    #     t2.backward()
-
-        # print(t1.grad)
-        # assert np.allclose(t1.grad, np.array([0.09003057, 0.24472847, 0.66524096]))
-
     def test_transpose(self):
         t1 = Tensor(np.array([[1.0, 2.0, 3.0]]))
 
@@ -230,11 +207,35 @@ class TestLogSoftmax(unittest.TestCase):
         )
         log_softmax_torch.backward(grad_output)
         grad_np = LogSoftmax.backward(ctx, cp.array(grad_output.numpy(), dtype=cp.float32))
-        # grad_np = LogSoftmax._backward(ctx, cp.array(grad_output.numpy(), dtype=cp.float32))
-        # print("...")
-        # print("CUPY")
-        # print(grad_np)
 
+        np.testing.assert_almost_equal(grad_np.get(), input_torch.grad.numpy(), decimal=3)
+
+@requires_torch
+@requires_cupy
+class TestSoftmax(unittest.TestCase):
+
+    def test_forward_backward(self):
+
+        import torch
+
+        input_np = cp.array([[0.1, 0.2, 0.3], [0.4, 0.5, 0.6]],  dtype=cp.float32)
+        input_torch = torch.tensor(input_np, dtype=torch.float32, requires_grad=True)
+
+        ctx = Softmax()
+        softmax_np = Softmax.forward(ctx, input_np, dim=-1)
+        softmax_torch = torch.nn.functional.softmax(input_torch, dim=-1)
+
+        np.testing.assert_almost_equal(
+            softmax_np.get(), softmax_torch.detach().numpy(), decimal=3
+        )
+
+        grad_output = torch.tensor(
+            [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]], dtype=torch.float32
+        )
+
+        softmax_torch.backward(grad_output)
+        # Check for grad
+        grad_np = Softmax.backward(ctx, cp.array(grad_output.numpy(), dtype=cp.float32))
         np.testing.assert_almost_equal(grad_np.get(), input_torch.grad.numpy(), decimal=3)
 
 

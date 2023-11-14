@@ -472,6 +472,7 @@ class LogSoftmax(CudaFunction):
 
         threads_per_block = 256
         blocks_per_grid = (rows * cols + threads_per_block - 1) // threads_per_block
+
         ctx.backward_kernel((blocks_per_grid,), (threads_per_block,), (grad_input, grad_output, input_tensor, rows, cols))
 
         return grad_input
@@ -494,21 +495,39 @@ class LogSoftmax(CudaFunction):
 
 
 class Softmax(CudaFunction):
+
+    def __init__(self, *tensors: Tuple[cp.ndarray]):
+        super().__init__(*tensors)
+        self.forward_kernel, self.backward_kernel = _load_cuda_kernels("softmax", "softmax_forward", "softmax_backward")
+
+
     @staticmethod
     def forward(ctx, self: cp.ndarray, dim: int = 0) -> cp.ndarray:
-        """Softmax of a tensor."""
+        if dim != -1 and dim != 1:
+            raise NotImplementedError("Kernel only supports dim=-1 or dim=1 for 2D tensors.")
+
         ctx.save_forward_context(self)
-        ctx.dim = dim
-        max_val = cp.max(self, axis=dim, keepdims=True)
-        exps = cp.exp(self - max_val)
-        ctx.exps = exps
-        return exps / exps.sum(axis=dim)
+        length = self.size
+        rows, cols = self.shape
+        output = cp.empty_like(self)
+        threads_per_block = 256
+        blocks_per_grid = (length + threads_per_block - 1) // threads_per_block
+        ctx.forward_kernel((blocks_per_grid,), (threads_per_block,), (output, self, rows, cols))
+        ctx.softmax_output = output
+        return output
 
     @staticmethod
     def backward(ctx, grad_output: cp.ndarray):
-        dim = ctx.dim
-        exps = ctx.exps
-        return grad_output * exps * (1 - exps.sum(axis=dim))
+        # dim = ctx.dim
+        # exps = ctx.exps
+        # return grad_output * exps * (1 - exps.sum(axis=dim))
+        #
+        rows, cols = grad_output.shape
+        grad_input = cp.empty_like(grad_output)
+        threads_per_block = 256
+        blocks_per_grid = (rows * cols + threads_per_block - 1) // threads_per_block
+        ctx.backward_kernel((blocks_per_grid,), (threads_per_block,), (grad_input, grad_output, ctx.softmax_output, rows, cols))
+        return grad_input
 
 
 class ReLU(CudaFunction):

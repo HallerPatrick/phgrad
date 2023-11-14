@@ -445,7 +445,9 @@ class Softmax(CPUFunction):
         """Softmax of a tensor."""
         ctx.save_forward_context(self)
         ctx.dim = dim
-        return np.exp(self) / np.exp(self).sum(axis=dim)
+        max_val = np.max(self, axis=dim, keepdims=True)
+        exps = np.exp(self - max_val)
+        return exps / exps.sum(axis=dim, keepdims=True)
 
     @staticmethod
     def backward(ctx, grad_output: np.ndarray):

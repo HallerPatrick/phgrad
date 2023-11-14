@@ -271,8 +271,6 @@ class TestEmbedding(unittest.TestCase):
         for _ in range(10):
             input = np.random.randint(0, 10, size=(100,))
             t = Tensor(input, dtype=types.int64)
-            print(">>")
-            print(t.data.dtype)
             result = embedding(t)
             self.assertEqual(result.data.shape, (100, 5))
 

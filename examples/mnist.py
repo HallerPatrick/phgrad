@@ -25,10 +25,11 @@ class MNIST():
     def run(self):
         if has_cuda_support():
             device = "cuda"
-            hidden_size = 64
         else:
             device = "cpu"
-            hidden_size = 256
+        
+        # At around 256, the GPU is faster than CPU
+        hidden_size = 256
 
         mlp = MLP(784, hidden_size, 10, bias=True, device=device)
         optimizer = SGD(mlp.parameters(), lr=0.005)
@@ -40,7 +41,7 @@ class MNIST():
         dataset_loader = []
         
         start_time = time.time()
-        batch_size = 64
+        batch_size = 128
         for i in range(0, len(self.X_train), batch_size):
             dataset_loader.append((Tensor(self.X_train[i : i + batch_size].astype(np.float32), device=device), Tensor(np.argmax(self.Y_train[i : i + batch_size].astype(np.float32), axis=1), device=device)))
         end_time = time.time()
@@ -53,13 +54,16 @@ class MNIST():
                 optimizer.zero_grad()
                 x, y = batch
                 y_pred = mlp(x)
-                y_pred = y_pred.log_softmax(dim=1)
-                loss = nllloss(y_pred, y, reduce="mean")
+                y_pred_log_sm = y_pred.log_softmax(dim=1)
+                loss = nllloss(y_pred_log_sm, y, reduce="mean")
                 loss.backward()
+                # Benchmark
+                y_pred.softmax(dim=-1)
                 optimizer.step()
                 losses.append(loss.data)
 
             y_pred = mlp(Tensor(self.X_test, device=device))
+            y_pred = y_pred.softmax(dim=-1)
             y_pred = np.argmax(y_pred.numpy(), axis=1)
 
             accuracy = (y_pred == self.Y_test.argmax(axis=1)).mean()

@@ -52,11 +52,6 @@ class Tensor:
         """Return the shape of the tensor."""
         return self.data.shape
 
-    # @property
-    # def dtype(self):
-    #     """Return the dtype of the tensor."""
-    #     return self.data.dtype
-
     def backward(self, allow_fill=True):
         """Compute the gradient of this tensor.
 
