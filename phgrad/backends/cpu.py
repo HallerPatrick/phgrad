@@ -482,6 +482,20 @@ class Sigmoid(CPUFunction):
     def backward(ctx, grad_output: np.ndarray):
         return grad_output * ctx.result * (1 - ctx.result)
 
+class TanH(CPUFunction):
+
+    @staticmethod
+    def forward(ctx, self: np.ndarray) -> np.ndarray:
+        """Tanh of a tensor."""
+        ctx.save_forward_context(self)
+        result = np.tanh(self)
+        ctx.result = result
+        return result
+
+    @staticmethod
+    def backward(ctx, grad_output: np.ndarray):
+        return grad_output * (1 - ctx.result ** 2)
+
 
 class Transpose(CPUFunction):
     @staticmethod
@@ -587,6 +601,7 @@ class Cat(CPUFunction):
         all_tensors = [self, *tensors]
         ctx.shapes = [t.shape for t in all_tensors]
         ctx.axis = dim
+        print([t.shape for t in all_tensors])
         return np.concatenate([t.data for t in all_tensors], axis=ctx.axis)
 
     @staticmethod
@@ -684,6 +699,7 @@ ops_map = {
     "log_softmax": attach_op(LogSoftmax),
     "softmax": attach_op(Softmax),
     "relu": attach_op(ReLU),
+    "tanh": attach_op(TanH),
     "sigmoid": attach_op(Sigmoid),
     "dropout": attach_op(Dropout),
     "take": attach_op(Take),

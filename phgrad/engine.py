@@ -194,6 +194,9 @@ class Tensor:
     def sigmoid(self) -> "Tensor":
         return self.backend.sigmoid(self)
 
+    def tanh(self) -> "Tensor":
+        return self.backend.tanh(self)
+
     # Unary ops + reduce
     def sum(self) -> "Tensor":
         return self.backend.sum(self)

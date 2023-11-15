@@ -25,39 +25,9 @@ import torch
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from phgrad.engine import Tensor
-from phgrad.nn import Linear, Module
+from phgrad.nn import Linear, Module, MLP
 from phgrad.loss import nllloss
 from phgrad.optim import SGD, l1_regularization
-
-
-class BOWClassifier(Module):
-    def __init__(self, vocab_size: int, num_classes: int) -> None:
-        super().__init__()
-        self.l1 = Linear(vocab_size, 64, bias=False)
-        self.l2 = Linear(64, num_classes, bias=False)
-
-    def forward(self, bow_vec: Tensor) -> Tensor:
-        h = self.l1(bow_vec)
-        h = h.relu()
-        h = self.l2(h)
-        return h.log_softmax(dim=1)
-
-    def parameters(self):
-        return self.l1.parameters() + self.l2.parameters()
-
-
-class TorchBOWClassifier(torch.nn.Module):
-    def __init__(self, vocab_size: int, num_classes: int) -> None:
-        super().__init__()
-        self.l1 = torch.nn.Linear(vocab_size, 64, bias=False)
-        self.l2 = torch.nn.Linear(64, num_classes, bias=False)
-
-    def forward(self, bow_vec):
-        h = self.l1(bow_vec)
-        h = torch.relu(h)
-        h = self.l2(h)
-        return torch.nn.functional.log_softmax(h, dim=1)
-
 
 def make_bow_vector(sentence: str, word_to_ix: dict) -> Tensor:
     vec = np.zeros(len(word_to_ix))
@@ -67,7 +37,10 @@ def make_bow_vector(sentence: str, word_to_ix: dict) -> Tensor:
 
 
 def make_target(label: int, label_to_ix: dict) -> Tensor:
-    return Tensor(np.array([[label]]), requires_grad=False)
+    # Make a 2-hot vector for the label
+    vec = np.zeros(2)
+    vec[label] = 1
+    return Tensor(np.expand_dims(vec, 0), requires_grad=False)
 
 
 def load_imdb_dataset():
@@ -78,7 +51,7 @@ def load_imdb_dataset():
     pos_reviews = df[df["label"] == 1]
     neg_reviews = df[df["label"] == 0]
 
-    N = 100
+    N = 10000
     pos_samples = pos_reviews.sample(N)
     neg_samples = neg_reviews.sample(N)
 
@@ -94,9 +67,9 @@ def load_imdb_dataset():
 def main():
     # 1000 Samples
     # train_data = load_dataset("imdb", split="train[1000:1200]").shuffle()
-    train_data = load_imdb_dataset()
 
-    print(train_data["label"])
+    device = "cuda"
+    train_data = load_imdb_dataset()
 
     word_to_ix = {}
     label_to_ix = {"neg": 0, "pos": 1}
@@ -108,21 +81,13 @@ def main():
 
     print(f"Number of words in vocab: {len(word_to_ix)}")
 
-    torch_classifier = TorchBOWClassifier(len(word_to_ix), 2)
-
-    model = BOWClassifier(len(word_to_ix), 2)
-
-    # Copy all params
-    model.l1.weights.data = torch_classifier.l1.weight.detach().numpy()
-    model.l2.weights.data = torch_classifier.l2.weight.detach().numpy()
+    model = MLP(len(word_to_ix), 256, 2)
 
     loss_function = nllloss
 
     optimizer = SGD(model.parameters(), lr=1)
-    torch_optimizer = torch.optim.SGD(torch_classifier.parameters(), lr=0.01)
 
     batch_size = 2
-    TORCH = False
 
     for epoch in range(10):
         print(f"Epoch {epoch}")
@@ -147,64 +112,30 @@ def main():
                 currrent_batch_target.append(make_target(sample["label"], label_to_ix))
                 currrent_batch_source = [t.data for t in currrent_batch_source]
                 currrent_batch_target = [t.data for t in currrent_batch_target]
-                if TORCH:
-                    bow_vec = torch.tensor(
-                        np.concatenate(currrent_batch_source, axis=0),
-                        dtype=torch.float32,
-                    )
-                    target = torch.tensor(
-                        np.concatenate(currrent_batch_target, axis=0), dtype=torch.long
-                    ).squeeze(1)
-                    torch_optimizer.zero_grad()
-
-                    log_probs = torch_classifier(bow_vec)
-                    loss = torch.nn.functional.nll_loss(log_probs, target)
-                    # exit()
-                    # torch_classifier.backward(loss)
-                    loss.backward()
-                    torch_optimizer.step()
-
-                    logits = log_probs.softmax(dim=1)
-                    # print(logits.shape)
-                    # print(logits)
-                    pred_idxs = argmax(logits, dim=1)
-                    # print(pred_idxs.shape)
-                    # print(pred_idxs)
-
-                    target_idxs = target.data
-                    batch_correct = np.sum((pred_idxs.numpy() == target_idxs.numpy()))
-                    total_correct += batch_correct
-                    total_samples += batch_size
-
-                    accuracy = total_correct / total_samples
-                    accuracy = accuracy.item()
-                    loss = loss.item()
-                    # print(loss)
 
                 bow_vec = Tensor(np.concatenate(currrent_batch_source, axis=0))
                 target = Tensor(np.concatenate(currrent_batch_target, axis=0))
                 optimizer.zero_grad()
-
-                log_probs = model(bow_vec)
+                
+                logits = model(bow_vec)
+                log_probs = logits.log_softmax(dim=1)
                 loss = loss_function(log_probs, target)
-
-                # loss.data += l1_regularization(model.parameters(), 0.01)
 
                 loss.backward()
                 optimizer.step()
 
-                # logits = log_probs.softmax()
-                # pred_idxs = argmax(logits, dim=1)
+                logits = logits.softmax().numpy()
+                pred_idxs = np.argmax(logits, axis=1)
 
-                # target_idxs = np.squeeze(target.data, axis=1)
-                # batch_correct = np.sum((pred_idxs == target_idxs))
-                # total_correct += batch_correct
-                # total_samples += batch_size
+                print(pred_idxs)
+                print(target.numpy())
+                batch_correct = np.sum((pred_idxs == target.numpy()))
+                total_correct += batch_correct
+                total_samples += batch_size
 
-                # accuracy = total_correct / total_samples
-                # loss = loss.data[0]
+                accuracy = total_correct / total_samples
 
-                # pbar.set_description(f"Loss: {loss:5.5f}, Accuracy: {accuracy:.2f}")
+                pbar.set_description(f"Loss: {loss.first_item[0]:5.5f}, Accuracy: {accuracy.item():2.2f}")
 
                 currrent_batch_source = []
                 currrent_batch_target = []

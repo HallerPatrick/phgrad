@@ -22,12 +22,10 @@ class RNN(Module):
 
     def forward(self, inp: Tensor, hidden_state: Tensor):
         inp = self.in2hidden(inp)
-        print(inp.shape)
-        comb = inp.cat((hidden_state,), 1)
         hidden = self.hidden2hidden(hidden_state)
-        # hidden = hidden.add(inp)
+        comb = inp + hidden_state
         # NOTE: Is sigmoid the right activation function to use here? Torch uses Tanh or ReLu
-        hidden = hidden.sigmoid()
-        output = self.hid2out(hidden)
-        return inp, hidden
+        comb = self.hid2out(comb)
+        comb = comb.tanh()
+        return comb, hidden
 
