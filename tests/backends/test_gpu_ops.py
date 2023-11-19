@@ -5,13 +5,13 @@ from functools import partial
 import numpy as np
 try:
     import cupy as cp
+    from phgrad.backends.cuda import LogSoftmax, Softmax
 except ImportError:
     cp = None
 
 from utils import requires_torch, requires_cupy
 
 from phgrad.engine import Tensor as Tensor
-from phgrad.backends.cuda import LogSoftmax, Softmax
 
 def tensor_with_cuda(*args, **kwargs):
     return partial(Tensor, *args, **kwargs, device="cuda")

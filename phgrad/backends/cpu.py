@@ -103,10 +103,14 @@ class CPUFunction:
         # Why are we even converting to a tensor in the first place?
         passing_args = []
         for t in x:
-            if hasattr(t, "data"):
+            if isinstance(t, np.ndarray):
+                passing_args.append(t)
+            # TODO: Find a better way to find out if this is a tensor
+            elif hasattr(t, "data"):
                 passing_args.append(t.data)
             else:
                 passing_args.append(t)
+
         
         if debug.DEBUG == 1:
             debug.func_calls[str(op_function)] += 1

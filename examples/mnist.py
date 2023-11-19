@@ -13,8 +13,10 @@ from phgrad.optim import SGD, Adam
 from phgrad.loss import nllloss
 from phgrad.utils import has_cuda_support
 from tests.utils import load_mnist
+from phgrad import types
 
-class MNIST():
+
+class MNIST:
     def setUp(self) -> None:
         X_train, Y_train, X_test, Y_test = load_mnist()
         self.X_train = X_train.reshape(-1, 28 * 28) / 255.0
@@ -27,7 +29,7 @@ class MNIST():
             device = "cuda"
         else:
             device = "cpu"
-        
+
         # At around 256, the GPU is faster than CPU
         hidden_size = 256
 
@@ -39,17 +41,30 @@ class MNIST():
         accuracies = []
 
         dataset_loader = []
-        
+
         start_time = time.time()
-        batch_size = 128
+        batch_size = 4
         for i in range(0, len(self.X_train), batch_size):
-            dataset_loader.append((Tensor(self.X_train[i : i + batch_size].astype(np.float32), device=device), Tensor(np.argmax(self.Y_train[i : i + batch_size].astype(np.float32), axis=1), device=device)))
+            dataset_loader.append(
+                (
+                    Tensor(
+                        self.X_train[i : i + batch_size].astype(np.float32),
+                        device=device,
+                    ),
+                    Tensor(
+                        np.argmax(
+                            self.Y_train[i : i + batch_size].astype(np.float32), axis=1
+                        ),
+                        device=device,
+                        dtype=types.int64
+                    ),
+                )
+            )
         end_time = time.time()
         print(f"Preprocess Time: {end_time - start_time:.2f} seconds")
 
-
         start_time = time.time()
-        for epoch in range(10):
+        for epoch in range(100):
             for batch in dataset_loader:
                 optimizer.zero_grad()
                 x, y = batch
@@ -76,6 +91,7 @@ class MNIST():
         print_summary()
 
         print(f"Training time: {end_time - start_time:.2f} seconds")
+
 
 if __name__ == "__main__":
     mnist = MNIST()

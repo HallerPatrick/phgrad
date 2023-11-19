@@ -29,6 +29,7 @@ from phgrad.nn import Linear, Module, MLP
 from phgrad.loss import nllloss
 from phgrad.optim import SGD, l1_regularization
 
+
 def make_bow_vector(sentence: str, word_to_ix: dict) -> Tensor:
     vec = np.zeros(len(word_to_ix))
     for word in sentence.split():
@@ -85,9 +86,9 @@ def main():
 
     loss_function = nllloss
 
-    optimizer = SGD(model.parameters(), lr=1)
+    optimizer = SGD(model.parameters(), lr=0.1)
 
-    batch_size = 2
+    batch_size = 100
 
     for epoch in range(10):
         print(f"Epoch {epoch}")
@@ -116,26 +117,28 @@ def main():
                 bow_vec = Tensor(np.concatenate(currrent_batch_source, axis=0))
                 target = Tensor(np.concatenate(currrent_batch_target, axis=0))
                 optimizer.zero_grad()
-                
+
                 logits = model(bow_vec)
                 log_probs = logits.log_softmax(dim=1)
+                target = target.argmax(dim=1)
                 loss = loss_function(log_probs, target)
 
                 loss.backward()
                 optimizer.step()
 
-                logits = logits.softmax().numpy()
+                logits = logits.softmax(dim=-1).numpy()
                 pred_idxs = np.argmax(logits, axis=1)
 
-                print(pred_idxs)
-                print(target.numpy())
-                batch_correct = np.sum((pred_idxs == target.numpy()))
+                target_idxs = target.numpy()
+                batch_correct = np.sum((pred_idxs == target_idxs))
                 total_correct += batch_correct
                 total_samples += batch_size
 
                 accuracy = total_correct / total_samples
 
-                pbar.set_description(f"Loss: {loss.first_item[0]:5.5f}, Accuracy: {accuracy.item():2.2f}")
+                pbar.set_description(
+                    f"Loss: {loss.first_item:5.5f}, Accuracy: {accuracy.item():2.2f}, Current Correct: {batch_correct}/{batch_size}, Total Correct: {total_correct}/{total_samples}"
+                )
 
                 currrent_batch_source = []
                 currrent_batch_target = []

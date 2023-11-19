@@ -25,10 +25,8 @@ def nllloss(inputs: Tensor, targets: Tensor, reduce="mean"):
         inputs_np = np.asarray(inputs.data.get(), dtype=np.float32)
         targets_np = np.asarray(targets.data.get(), dtype=np.int64)
 
-    num_classes = inputs_np.shape[1]
-    # TODO: Add arange to tensor
-    indices = Tensor(np.arange(len(targets_np)) * num_classes + targets_np, requires_grad=False, device=inputs.device, dtype=types.int64)
 
+    indices = np.arange(inputs_np.shape[0]) * inputs_np.shape[1] + targets_np
     inputs = inputs.reshape(-1)
     our_log_probs = inputs.take(indices)
     loss = our_log_probs.neg()
