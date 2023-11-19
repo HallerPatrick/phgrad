@@ -41,9 +41,6 @@ class Tensor:
         # It contains the operation that created this tensor
         self.ctx = None
 
-    def __getitem__(self, idx) -> "Tensor":
-        return Tensor(self.data[idx])
-
     def __setitem__(self, idx, value):
         self.data[idx] = value
 
@@ -171,6 +168,17 @@ class Tensor:
 
 
     # ========= OPS =========
+
+    def __getitem__(self, idx) -> "Tensor":
+        """Return a new tensor with the selected indices.
+
+        NOTE: For now only support indexing with integers and integer slices
+        """
+        if isinstance(idx, tuple):
+            for i in idx:
+                if not isinstance(i, slice):
+                    assert isinstance(i, int), "Only support indexing with integers"
+        return self.backend.getitem(self, idx)
 
     # Unary ops
     def exp(self) -> "Tensor":

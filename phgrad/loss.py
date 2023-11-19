@@ -26,7 +26,7 @@ def nllloss(inputs: Tensor, targets: Tensor, reduce="mean"):
         targets_np = np.asarray(targets.data.get(), dtype=np.int64)
 
 
-    indices = np.arange(inputs_np.shape[0]) * inputs_np.shape[1] + targets_np
+    indices = np.arange(inputs.shape[0]) * inputs.shape[1] + targets_np
     inputs = inputs.reshape(-1)
     our_log_probs = inputs.take(indices)
     loss = our_log_probs.neg()
@@ -40,7 +40,7 @@ def nllloss(inputs: Tensor, targets: Tensor, reduce="mean"):
     return loss
 
 
-def cross_entropy(inputs: Tensor, targets: Tensor):
+def cross_entropy(inputs: Tensor, targets: Tensor, dim: int = -1):
     """Cross entropy loss.
 
     Args:
@@ -51,5 +51,5 @@ def cross_entropy(inputs: Tensor, targets: Tensor):
         Scalar value of the loss.
     """
     # assert target < inputs.shape[1], "Invalid target"
-    log_logits = inputs.log_softmax()
+    log_logits = inputs.log_softmax(dim=dim)
     return nllloss(log_logits, targets)

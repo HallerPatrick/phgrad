@@ -500,6 +500,25 @@ class TanH(CPUFunction):
     def backward(ctx, grad_output: np.ndarray):
         return grad_output * (1 - ctx.result ** 2)
 
+class GetItem(CPUFunction):
+    @staticmethod
+    def forward(ctx, tensor: np.ndarray, indices) -> np.ndarray:
+        """Get item using numpy-style indexing."""
+        print("forward", tensor.shape, indices)
+        ctx.save_forward_context(tensor.shape, indices)
+        return tensor[indices]
+
+    @staticmethod
+    def backward(ctx, grad_output: np.ndarray):
+        indices = ctx.forward_context.pop()
+        input_shape = ctx.forward_context.pop()
+        print("backward", input_shape, indices)
+        grad_input = np.zeros(input_shape, dtype=grad_output.dtype)
+
+        # Placing the gradients back in the positions specified by the slice
+        np.add.at(grad_input, indices, grad_output)
+        return grad_input
+
 
 class Transpose(CPUFunction):
     @staticmethod
@@ -706,6 +725,7 @@ ops_map = {
     "tanh": attach_op(TanH),
     "sigmoid": attach_op(Sigmoid),
     "dropout": attach_op(Dropout),
+    "getitem": attach_op(GetItem),
     "take": attach_op(Take),
     "transpose": attach_op(Transpose),
     "reshape": attach_op(Reshape),

@@ -116,3 +116,44 @@ class TestTensor(unittest.TestCase):
 
         assert np.allclose(t3.data, np.array([[2.0, 0.0, -2.0]]))
         assert t3.shape == (1, 3)
+
+    def test_getitem(self):
+
+        t1 = Tensor(np.array([[1.0, 2.0, 3.0]]))
+        t2 = t1[0]
+
+        assert np.allclose(t2.data, np.array([1.0, 2.0, 3.0]))
+        assert t2.shape == (3,)
+
+        t3 = t1[0, 0]
+
+        assert np.allclose(t3.data, np.array([1.0]))
+        assert t3.shape == ()
+
+        t4 = t1[0, 0:2]
+
+        assert np.allclose(t4.data, np.array([1.0, 2.0]))
+        assert t4.shape == (2,)
+
+    def test_getitem_backward(self):
+
+        t1 = Tensor(np.array([[1.0, 2.0, 3.0]]))
+        t2 = t1[0]
+        t3 = t2.sum()
+        t3.backward()
+
+        assert np.allclose(t2.grad, np.array([1.0, 1.0, 1.0]))
+
+        t4 = t1[0, 0]
+        t5 = t4.sum()
+        t5.backward()
+
+        assert np.allclose(t4.grad, np.array([1.0]))
+
+        t6 = t1[0, 0:2]
+        t7 = t6.sum()
+        t7.backward()
+
+        assert np.allclose(t6.grad, np.array([1.0, 1.0]))
+
+
