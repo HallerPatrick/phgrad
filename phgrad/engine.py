@@ -1,14 +1,14 @@
 import time
-from typing import Any, Optional, Tuple, Union, Type
+from typing import Any, Optional, Tuple, Type, Union
 
 import numpy as np
 
-from phgrad.debug import DEBUG, backward_time
-from phgrad.debug import tensor_creations
-from phgrad.backends import backend_from_device
 from phgrad import types
+from phgrad.backends import backend_from_device
+from phgrad.debug import DEBUG, backward_time, tensor_creations
 
 TensorOrScalar = Union["Tensor", float, int]
+
 
 class Tensor:
     __slots__ = ("data", "grad", "requires_grad", "ctx", "backend", "device", "dtype")
@@ -28,10 +28,10 @@ class Tensor:
             self.backend = _backend
             # NOTE: This only works with one device for now
             self.device = self.backend.name
-        
+
         if DEBUG == 1:
             tensor_creations[device] += 1
-        
+
         self.dtype = dtype
         self.data = self.backend.init_data(value, self.dtype)
         self.grad = None
@@ -49,7 +49,7 @@ class Tensor:
         """Return the shape of the tensor."""
         return self.data.shape
 
-    @property 
+    @property
     def dims(self):
         """Return the number of dimensions of the tensor."""
         return len(self.shape)
@@ -71,15 +71,15 @@ class Tensor:
             self.grad = np.ones_like(self.data)
 
         assert self.grad is not None
-        
+
         if DEBUG == 1:
             start_time = time.time()
 
         grads = self.ctx.backward(self.ctx, self.grad)
 
         if DEBUG == 1:
-            backward_time[str(self.ctx)] += (time.time() - start_time)
-        
+            backward_time[str(self.ctx)] += time.time() - start_time
+
         if len(self.ctx.prev) == 1 or (not isinstance(grads, tuple)):
             grads = [grads]
 
@@ -89,23 +89,28 @@ class Tensor:
             for t, g in zip(self.ctx.prev, grads):
                 if not isinstance(t, tuple):
                     t = (t,)
-                print(f"Shapes: input {[x.shape for x in t]}, grad {g.shape}, op={self.ctx}")
+                print(
+                    f"Shapes: input {[x.shape for x in t]}, grad {g.shape}, op={self.ctx}"
+                )
                 print("grads:", grads)
-                # print("Values:", t, g)
+                print("Values:", t, g)
                 print("=======")
 
         for t, g in zip(self.ctx.prev, grads):
             if g is None:
                 continue
-            
+
             if isinstance(t, tuple):
                 t = t[0]
 
-            assert (
-                g.shape == t.data.shape
-            ), "Grad shape must match tensor shape, {} != {} ({})".format(
-                g.shape, t.data.shape, self.ctx
-            )
+            # What if the tensor value is a scalar?
+            # Check if tensor is a scalar and gradient has shape (1,)
+            if not (t.data.shape == () and g.shape == (1,)):
+                assert (
+                    g.shape == t.data.shape
+                ), "Grad shape must match tensor shape, {} != {} ({})".format(
+                    g.shape, t.data.shape, self.ctx
+                )
             t.grad = g
             t.backward(False)
 
@@ -143,7 +148,6 @@ class Tensor:
         return self.backend.numpy(self.data)
 
     def to(self, device: Union[str, int], in_place=False) -> "Tensor":
-
         if self.device == device:
             return self
 
@@ -166,7 +170,6 @@ class Tensor:
     def to_dtype(self, dtype: Type) -> "Tensor":
         return self.backend.to_dtype(self, dtype)
 
-
     # ========= OPS =========
 
     def __getitem__(self, idx) -> "Tensor":
@@ -178,7 +181,7 @@ class Tensor:
             for i in idx:
                 if not isinstance(i, slice):
                     assert isinstance(i, int), "Only support indexing with integers"
-        return self.backend.getitem(self, idx)
+        return self.backend.getitem(self, indices=idx)
 
     # Unary ops
     def exp(self) -> "Tensor":
@@ -279,7 +282,7 @@ class Tensor:
 
     def __neg__(self):
         return self.neg()
-    
+
     def argmax(self, dim: Optional[int] = None):
         return self.backend.argmax(self, dim=dim)
 
@@ -290,7 +293,9 @@ class Tensor:
         requires_grad: bool = False,
         device: str = "cpu",
     ):
-        assert isinstance(shape, int) or len(shape) <= 2, "Only support 1D and 2D tensor creation"
+        assert (
+            isinstance(shape, int) or len(shape) <= 2
+        ), "Only support 1D and 2D tensor creation"
         backend = backend_from_device(device, Tensor)
         return cls(
             backend.eye(*shape),
@@ -329,7 +334,8 @@ class Tensor:
             _backend=backend,
         )
 
-
-    def scatter_add(self, indices: "Tensor", values: TensorOrScalar, axis: Optional[int] = None) -> "Tensor":
+    def scatter_add(
+        self, indices: "Tensor", values: TensorOrScalar, axis: Optional[int] = None
+    ) -> "Tensor":
         """This is inplace"""
         self.backend.scatter_add(self.data, indices.data, values, axis)

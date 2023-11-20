@@ -1,14 +1,14 @@
-
-from typing import Dict, Type, Callable
-from argparse import Namespace
 import importlib
-
+from argparse import Namespace
 from functools import lru_cache
+from typing import Callable, Dict, Type
 
 
 def apply_tensorfication(
     fn: Callable, tensor_type: Type, backend_tensor_type: Type
 ) -> Callable:
+    """Wrapper to convert backend functions to tensor functions."""
+
     def wrapper(*args, **kwargs):
         val = fn(*args, **kwargs)
 
@@ -25,11 +25,17 @@ def apply_tensorfication(
 
         if isinstance(args[0], tensor_type):
             tensor = tensor_type(
-                fn_result, requires_grad=args[0].requires_grad, _backend=args[0].backend, dtype=args[0].dtype
+                fn_result,
+                requires_grad=args[0].requires_grad,
+                _backend=args[0].backend,
+                dtype=args[0].dtype,
             )
         elif len(args) > 1 and isinstance(args[1], tensor_type):
             tensor = tensor_type(
-                fn_result, requires_grad=args[1].requires_grad, _backend=args[1].backend, dtype=args[1].dtype
+                fn_result,
+                requires_grad=args[1].requires_grad,
+                _backend=args[1].backend,
+                dtype=args[1].dtype,
             )
         else:
             # TODO: Do we need check for is_differentiable if we passed another tensor to op?
@@ -40,6 +46,7 @@ def apply_tensorfication(
         return tensor
 
     return wrapper
+
 
 class BackendNamespace(Namespace):
     def __getattr__(self, item):
@@ -65,17 +72,21 @@ def backend_from_device(device: str, tensor_type: Type):
     """
 
     assert device in ["cpu", "cuda"], f"Unknown device {device}"
-    
+
     backend = importlib.import_module(f"phgrad.backends.{device}")
     backend_ops: Dict[str, Callable] = backend.ops_map
     for attr, func in backend_ops.items():
-        backend_ops[attr] = apply_tensorfication(func, tensor_type, backend.BackendTensor)
+        backend_ops[attr] = apply_tensorfication(
+            func, tensor_type, backend.BackendTensor
+        )
 
     factories = backend.factories
     for attr, func in backend.factories.items():
         factories[attr] = apply_tensorfication(func, tensor_type, backend.BackendTensor)
 
-    backend_namespace = BackendNamespace(**backend_ops, **factories, **backend.funcs, name=device)
+    backend_namespace = BackendNamespace(
+        **backend_ops, **factories, **backend.funcs, name=device
+    )
     return backend_namespace
 
 

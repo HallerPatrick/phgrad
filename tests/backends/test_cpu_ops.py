@@ -349,3 +349,15 @@ class TestScatterAdd(unittest.TestCase):
         # Infer num_classes from idxes
         one_hot_encoding = futils.one_hot(idxes)
         np.testing.assert_equal(one_hot_encoding.data, expected_one_hot_encoding)
+
+    def test_sum(self):
+        t = Tensor(np.array([3]))
+        t2 = t.sum()
+        assert t2.data == np.array([3])
+        assert t2.shape == (1,)
+        t2.backward()
+        assert t.grad == np.array([1])
+
+
+
+

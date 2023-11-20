@@ -502,9 +502,8 @@ class TanH(CPUFunction):
 
 class GetItem(CPUFunction):
     @staticmethod
-    def forward(ctx, tensor: np.ndarray, indices) -> np.ndarray:
+    def forward(ctx, tensor: np.ndarray, *, indices) -> np.ndarray:
         """Get item using numpy-style indexing."""
-        print("forward", tensor.shape, indices)
         ctx.save_forward_context(tensor.shape, indices)
         return tensor[indices]
 
@@ -512,11 +511,13 @@ class GetItem(CPUFunction):
     def backward(ctx, grad_output: np.ndarray):
         indices = ctx.forward_context.pop()
         input_shape = ctx.forward_context.pop()
-        print("backward", input_shape, indices)
         grad_input = np.zeros(input_shape, dtype=grad_output.dtype)
 
         # Placing the gradients back in the positions specified by the slice
-        np.add.at(grad_input, indices, grad_output)
+        # print(grad_input, indices, grad_output)
+        # print(grad_input.shape, indices, grad_output.shape)
+        print(np.array(indices))
+        np.add.at(grad_input, np.array(indices), grad_output)
         return grad_input
 
 
@@ -577,11 +578,7 @@ class Take(CPUFunction):
         input = ctx.forward_context.pop()
         grad_input = np.zeros_like(input, dtype=np.float32)
 
-        # TODO: Should we be concerned if indices is a memoryview?
-        if isinstance(ctx.indices, memoryview):
-            indices = ctx.indices.tolist()
-        else:
-            indices = ctx.indices
+        indices = ctx.indices
 
         # Iterate over each index and add the corresponding gradient
         for idx, grad in zip(indices, grad_output):

@@ -144,7 +144,9 @@ class TestTensor(unittest.TestCase):
 
         assert np.allclose(t2.grad, np.array([1.0, 1.0, 1.0]))
 
+        # TODO: We have a problem here with the shape of the return value and the gradient
         t4 = t1[0, 0]
+        print(t4)
         t5 = t4.sum()
         t5.backward()
 

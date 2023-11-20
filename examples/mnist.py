@@ -64,7 +64,7 @@ class MNIST:
         print(f"Preprocess Time: {end_time - start_time:.2f} seconds")
 
         start_time = time.time()
-        for epoch in range(100):
+        for epoch in range(1):
             for batch in dataset_loader:
                 optimizer.zero_grad()
                 x, y = batch
@@ -91,6 +91,14 @@ class MNIST:
         print_summary()
 
         print(f"Training time: {end_time - start_time:.2f} seconds")
+
+        if False:
+            import matplotlib.pyplot as plt
+
+            plt.plot(losses)
+            plt.title("Loss")
+            plt.show()
+
 
 
 if __name__ == "__main__":
