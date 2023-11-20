@@ -24,11 +24,12 @@ class MNIST:
         self.Y_train = np.eye(10)[Y_train.reshape(-1)]
         self.Y_test = np.eye(10)[Y_test.reshape(-1)]
 
-    def run(self):
-        if has_cuda_support():
-            device = "cuda"
-        else:
-            device = "cpu"
+    def run(self, device=None):
+        if device is None:
+            if has_cuda_support():
+                device = "cuda"
+            else:
+                device = "cpu"
 
         # At around 256, the GPU is faster than CPU
         hidden_size = 256
@@ -64,7 +65,7 @@ class MNIST:
         print(f"Preprocess Time: {end_time - start_time:.2f} seconds")
 
         start_time = time.time()
-        for epoch in range(1):
+        for epoch in range(10):
             for batch in dataset_loader:
                 optimizer.zero_grad()
                 x, y = batch
@@ -102,6 +103,12 @@ class MNIST:
 
 
 if __name__ == "__main__":
+
+    args = sys.argv[1:]
+    if len(args) == 0:
+        print("Usage: python examples/mnist.py <cpu|cuda>")
+        sys.exit(0)
+    device = args[0]
     mnist = MNIST()
     mnist.setUp()
-    mnist.run()
+    mnist.run(device)

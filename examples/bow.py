@@ -16,6 +16,8 @@ Why is that?
 import os
 import sys
 
+sys.setrecursionlimit(10000)
+
 import numpy as np
 import pandas as pd
 from datasets import load_dataset, Dataset
@@ -24,6 +26,7 @@ import torch
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from phgrad.debug import print_summary
 from phgrad.engine import Tensor
 from phgrad.nn import Linear, Module, MLP
 from phgrad.loss import nllloss
@@ -52,7 +55,7 @@ def load_imdb_dataset():
     pos_reviews = df[df["label"] == 1]
     neg_reviews = df[df["label"] == 0]
 
-    N = 10000
+    N = pos_reviews.shape[0]
     pos_samples = pos_reviews.sample(N)
     neg_samples = neg_reviews.sample(N)
 
@@ -65,11 +68,10 @@ def load_imdb_dataset():
     return balanced_dataset
 
 
-def main():
+def main(device):
     # 1000 Samples
     # train_data = load_dataset("imdb", split="train[1000:1200]").shuffle()
 
-    device = "cuda"
     train_data = load_imdb_dataset()
 
     word_to_ix = {}
@@ -82,7 +84,7 @@ def main():
 
     print(f"Number of words in vocab: {len(word_to_ix)}")
 
-    model = MLP(len(word_to_ix), 256, 2)
+    model = MLP(len(word_to_ix), 256, 2, device=device)
 
     loss_function = nllloss
 
@@ -114,8 +116,8 @@ def main():
                 currrent_batch_source = [t.data for t in currrent_batch_source]
                 currrent_batch_target = [t.data for t in currrent_batch_target]
 
-                bow_vec = Tensor(np.concatenate(currrent_batch_source, axis=0))
-                target = Tensor(np.concatenate(currrent_batch_target, axis=0))
+                bow_vec = Tensor(np.concatenate(currrent_batch_source, axis=0), device=device)
+                target = Tensor(np.concatenate(currrent_batch_target, axis=0), device=device)
                 optimizer.zero_grad()
 
                 logits = model(bow_vec)
@@ -144,5 +146,13 @@ def main():
                 currrent_batch_target = []
 
 
+    print_summary()
+
+
 if __name__ == "__main__":
-    main()
+    args = sys.argv[1:]
+    if len(args) == 0:
+        print("Usage: python examples/mnist.py <cpu|cuda>")
+        sys.exit(0)
+    device = args[0]
+    main(device)

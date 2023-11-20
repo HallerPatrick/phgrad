@@ -126,7 +126,9 @@ class CudaFunction:
         # Why are we even converting to a tensor in the first place?
         passing_args = []
         for t in x:
-            if hasattr(t, "data"):
+            if isinstance(t, cp.ndarray):
+                passing_args.append(t)
+            elif hasattr(t, "data"):
                 passing_args.append(t.data)
             else:
                 passing_args.append(t)
@@ -603,17 +605,19 @@ class Take(CudaFunction):
     """
 
     @staticmethod
-    def forward(ctx, input: cp.ndarray, indices: cp.ndarray) -> cp.ndarray:
+    def forward(ctx, self: cp.ndarray, indices: cp.ndarray) -> cp.ndarray:
         """Take elements from a tensor using indices."""
-        ctx.save_forward_context(input, indices)
+        assert indices.dtype == cp.int64 or indices.dtype == bool, f"Indices must be of type int64 or bool, got {indices.dtype}"
+        ctx.save_forward_context(self)
+        ctx.indices = indices
         # Assume indices are for the first dimension
-        return input[indices]
+        return self[indices]
 
     @staticmethod
     def backward(ctx, grad_output: cp.ndarray):
-        input, indices = ctx.forward_context
-        grad_input = cp.zeros_like(input, dtype=cp.float32)
-        cpx.scatter_add(grad_input, indices, grad_output)
+        input_tensor = ctx.forward_context.pop(0)
+        grad_input = cp.zeros_like(input_tensor, dtype=cp.float32)
+        cpx.scatter_add(grad_input, ctx.indices, grad_output)
         return grad_input
 
 
@@ -718,6 +722,9 @@ def zeros(shape: Tuple[int]) -> cp.ndarray:
     """
     return cp.zeros(shape)
 
+def arange(start: int, stop: Optional[int] = None, step: int = 1) -> cp.ndarray:
+    return cp.arange(start, stop, step)
+
 def attach_op(function: Type[CudaFunction]):
     return partial(function.apply, function)
 
@@ -758,5 +765,6 @@ factories = {
     "eye": eye,
     "ones": ones,
     "zeros": zeros,
+    "arange": arange,
 }
 

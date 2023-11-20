@@ -304,6 +304,12 @@ class Tensor:
             _backend=backend,
         )
 
+    def scatter_add(
+        self, indices: "Tensor", values: TensorOrScalar, axis: Optional[int] = None
+    ) -> "Tensor":
+        """This is inplace"""
+        self.backend.scatter_add(self.data, indices.data, values, axis)
+
     @classmethod
     def zeros(
         cls: Type["Tensor"],
@@ -334,8 +340,22 @@ class Tensor:
             _backend=backend,
         )
 
-    def scatter_add(
-        self, indices: "Tensor", values: TensorOrScalar, axis: Optional[int] = None
-    ) -> "Tensor":
-        """This is inplace"""
-        self.backend.scatter_add(self.data, indices.data, values, axis)
+    @classmethod
+    def arange(
+        cls: Type["Tensor"],
+        start: int,
+        end: Optional[int] = None,
+        step: int = 1,
+        requires_grad: bool = False,
+        device: str = "cpu",
+        dtype: types.DType = types.int64,
+    ):
+        backend = backend_from_device(device, Tensor)
+        return cls(
+            backend.arange(start, end, step),
+            requires_grad=requires_grad,
+            device=device,
+            dtype=dtype,
+            _backend=backend,
+        )
+

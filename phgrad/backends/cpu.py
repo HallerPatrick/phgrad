@@ -103,6 +103,7 @@ class CPUFunction:
         # Why are we even converting to a tensor in the first place?
         passing_args = []
         for t in x:
+
             if isinstance(t, np.ndarray):
                 passing_args.append(t)
             # TODO: Find a better way to find out if this is a tensor
@@ -516,8 +517,11 @@ class GetItem(CPUFunction):
         # Placing the gradients back in the positions specified by the slice
         # print(grad_input, indices, grad_output)
         # print(grad_input.shape, indices, grad_output.shape)
-        print(np.array(indices))
-        np.add.at(grad_input, np.array(indices), grad_output)
+        print(">>")
+        print(indices)
+        print(grad_input[indices])
+        print(grad_output)
+        np.add.at(grad_input, indices, grad_output)
         return grad_input
 
 
@@ -690,6 +694,8 @@ def zeros(shape: Tuple[int]) -> np.ndarray:
     """
     return np.zeros(shape)
 
+def arange(start: int, stop: int, step: int = 1) -> np.ndarray:
+    return np.arange(start, stop, step)
 
 def attach_op(function: Type[CPUFunction]):
     return partial(function.apply, function)
@@ -735,4 +741,5 @@ factories = {
     "eye": eye,
     "ones": ones,
     "zeros": zeros,
+    "arange": arange,
 }

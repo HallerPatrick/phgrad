@@ -4,7 +4,6 @@ import numpy as np
 
 from phgrad.engine import Tensor
 from phgrad.init import he_initialization
-from phgrad.futils import one_hot
 
 from .base import Module
 

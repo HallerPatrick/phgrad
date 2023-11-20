@@ -1,7 +1,6 @@
 import numpy as np
 
 from .engine import Tensor
-from . import types
 
 
 def nllloss(inputs: Tensor, targets: Tensor, reduce="mean"):
@@ -17,7 +16,7 @@ def nllloss(inputs: Tensor, targets: Tensor, reduce="mean"):
     assert reduce in ["mean", "sum"], "Invalid reduce"
 
     # Flatten the inputs and create an array of indices corresponding to the target classes
-    # TODO: MOve those ops to the backend
+    # # TODO: MOve those ops to the backend
     if inputs.device == "cpu":
         inputs_np = np.asarray(inputs.data, dtype=np.float32)
         targets_np = np.asarray(targets.data, dtype=np.int64)
@@ -25,8 +24,11 @@ def nllloss(inputs: Tensor, targets: Tensor, reduce="mean"):
         inputs_np = np.asarray(inputs.data.get(), dtype=np.float32)
         targets_np = np.asarray(targets.data.get(), dtype=np.int64)
 
-
-    indices = np.arange(inputs.shape[0]) * inputs.shape[1] + targets_np
+    
+    # TODO: We should not use numpy here
+    # Impl: arange
+    indices = Tensor.arange(inputs.shape[0], device=inputs.device) * inputs.shape[1] + targets
+    # indices = np.arange(inputs.shape[0]) * inputs.shape[1] + targets_np
     inputs = inputs.reshape(-1)
     our_log_probs = inputs.take(indices)
     loss = our_log_probs.neg()
