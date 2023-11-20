@@ -594,6 +594,7 @@ class Flatten(CudaFunction):
 
     @staticmethod
     def backward(ctx, grad_output: cp.ndarray):
+
         input_shape = ctx.forward_context[0]
         return cp.reshape(grad_output, input_shape)
 

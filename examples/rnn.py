@@ -28,7 +28,10 @@ class LM(Module):
     def forward(self, x: Tensor, hidden_state: Tensor) -> Tuple[Tensor, Tensor]:
         x = self.embedding(x)
         x, hidden_state = self.rnn(x, hidden_state)
+        print("Logits", x.shape)
+        print("Hidden", hidden_state.shape)
         x = self.decoder(x)
+        print(x.shape)
         return x, hidden_state
 
 
@@ -55,8 +58,10 @@ def main():
             sequence = Tensor(text_as_int[i : i + seq_length], dtype=phtypes.int64)
             target_sequence = Tensor(text_as_int[i + 1 : i + seq_length + 1], dtype=phtypes.int64)
             res, hidden_state = model(sequence, hidden_state)
-            print(res.shape, hidden_state.shape, target_sequence.shape)
+            # print(res.shape, target_sequence.shape)
+            # print(res, sequence, target_sequence)
             res = res.log_softmax(dim=1)
+            # exit()
             loss = nllloss(res, target_sequence, reduce="mean")
             loss.backward()
             optimizer.step()

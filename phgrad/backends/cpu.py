@@ -381,19 +381,40 @@ class Max(CPUFunction):
         return grad_output * np.ones_like(input_tensor)
 
 
+# class MatMul(CPUFunction):
+#     @staticmethod
+#     def forward(ctx, self: np.ndarray, tensor: np.ndarray) -> np.ndarray:
+#         """Matrix multiplication of two tensors."""
+#         ctx.save_forward_context(self, tensor)
+#         # TODO: Handle overflow
+#         return self @ tensor
+#
+#     @staticmethod
+#     def backward(ctx, grad_output: np.ndarray):
+#         input, weight = ctx.forward_context
+#         grad_input = grad_output @ np.swapaxes(weight, -2, -1)
+#         grad_weight = np.swapaxes(input, -2, -1) @ grad_output
+#         return grad_input, grad_weight
+#
+# import numpy as np
+
 class MatMul(CPUFunction):
     @staticmethod
     def forward(ctx, self: np.ndarray, tensor: np.ndarray) -> np.ndarray:
         """Matrix multiplication of two tensors."""
+        if self.shape[-1] != tensor.shape[-2]:
+            raise ValueError("Incompatible dimensions for matrix multiplication.")
         ctx.save_forward_context(self, tensor)
-        # TODO: Handle overflow
         return self @ tensor
 
     @staticmethod
     def backward(ctx, grad_output: np.ndarray):
         input, weight = ctx.forward_context
-        grad_input = grad_output @ np.swapaxes(weight, -2, -1)
-        grad_weight = np.swapaxes(input, -2, -1) @ grad_output
+        if grad_output.shape[-1] != weight.shape[-1]:
+            raise ValueError("Gradient output dimensions do not match weight dimensions.")
+        grad_input = grad_output @ weight.T
+        grad_weight = input.T @ grad_output
+        print(grad_input.shape, grad_weight.shape)
         return grad_input, grad_weight
 
 

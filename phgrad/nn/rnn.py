@@ -17,15 +17,14 @@ class RNN(Module):
     def __init__(self, inp_dim: int, hidden_size: int, device: str = "cpu") -> None:
         super().__init__()
         self.in2hidden = Linear(inp_dim, hidden_size, device=device)
-        self.hidden2hidden = Linear(hidden_size, hidden_size, device=device)
-        self.hid2out = Linear(hidden_size, inp_dim, device=device)
+        self.hid2hid = Linear(hidden_size, hidden_size, device=device)
+        self.hid2out = Linear(hidden_size, hidden_size, device=device)
 
     def forward(self, inp: Tensor, hidden_state: Tensor):
-        inp = self.in2hidden(inp)
-        hidden = self.hidden2hidden(hidden_state)
-        comb = inp + hidden_state
-        # NOTE: Is sigmoid the right activation function to use here? Torch uses Tanh or ReLu
-        comb = self.hid2out(comb)
-        comb = comb.tanh()
-        return comb, hidden
+        combined = self.in2hidden(inp).add(self.hid2hid(hidden_state))
+        next_hidden = combined.tanh()
+        print(combined.shape)
+        print(next_hidden.shape)
+        logits = self.hid2out(next_hidden)
+        return logits, next_hidden
 
