@@ -41,53 +41,48 @@ def main():
     text_as_int = np.array([char2idx[c] for c in text])
     
     epochs = 1
-    seq_length = 250
+    seq_length = 200
 
     model = LM(len(vocab), 256, 256)
-    optimizer = SGD(model.parameters(), lr=0.1)
+    optimizer = SGD(model.parameters(), lr=0.5)
 
     hidden_state = Tensor(np.zeros((1, 256), dtype=np.float32))
     
     for _ in range(epochs):
-        pbar = tqdm(range(0, len(text_as_int) - 100000 - seq_length, seq_length))
+        pbar = tqdm(range(0, len(text_as_int) - 600000 - seq_length, seq_length))
         for i in pbar:
             optimizer.zero_grad()
             sequence = Tensor([text_as_int[i : i + seq_length]], dtype=phtypes.int64)
             target_sequence = Tensor([text_as_int[i + 1 : i + seq_length + 1]], dtype=phtypes.int64)
             res, hidden_state = model(sequence, hidden_state)
             res = res.log_softmax(dim=1)
-            loss = nllloss(res, target_sequence, reduce="mean")
+            loss = nllloss(res.squeeze(dim=0), target_sequence.squeeze(dim=0), reduce="mean")
             loss.backward()
             optimizer.step()
             hidden_state = hidden_state.detach()
-
-            pbar.set_description(f"Loss: {loss.first_item[0]:.3f}")
+            pbar.set_description(f"Loss: {loss.first_item:.3f}")
 
     # Generate some text
-    current_text = "I "
+    input_ids = text_as_int[0 : 0 + seq_length]
+    current_text = "".join(idx2char[input_ids])
+    # current_text = "I hurt myself"
 
     hidden_state = Tensor(np.zeros((1, 256), dtype=np.float32))
 
     print("Input:", current_text, end="")
+    print("=====")
 
-    for i in range(1000):
+    for i in range(10):
+        # sequence = Tensor([text_as_int[i : i + seq_length + 1]], dtype=phtypes.int64)
         sequence = Tensor([[char2idx[c] for c in current_text]], dtype=phtypes.int64)
         res, hidden_state = model(sequence, hidden_state)
-        res = res.softmax(dim=2)
-        res = res.detach().numpy()[0]
-        idx = np.argmax(res[-1, :])
-        current_text += idx2char[idx]
-        print(current_text)
-
-
-
-
-
-
-
-
-
-
+        res = res.squeeze(dim=0).softmax(dim=-1)
+        res = res[-1, :]
+        # Take the last character
+        idx = res.argmax().detach().numpy()
+        current_text += idx2char[int(idx)]
+        print(idx2char[int(idx)], end="")
 
 if __name__ == "__main__":
     main()
+

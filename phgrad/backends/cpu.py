@@ -667,6 +667,18 @@ class Cat(CPUFunction):
         return tuple(grads)
 
 
+class Squeeze(CPUFunction):
+    @staticmethod
+    def forward(ctx, self: np.ndarray, *, dim: int = 0):
+        ctx.save_forward_context(self)
+        ctx.dim = dim
+        return np.squeeze(self, axis=dim)
+
+    @staticmethod
+    def backward(ctx, grad_output: np.ndarray):
+        return np.expand_dims(grad_output, axis=ctx.dim)
+
+
 class ArgMax(CPUFunction):
     differentiable = False
 
@@ -773,6 +785,7 @@ ops_map = {
     "flatten": attach_op(Flatten),
     "cat": attach_op(Cat),
     "argmax": attach_op(ArgMax),
+    "squeeze": attach_op(Squeeze),
 }
 
 factories = {

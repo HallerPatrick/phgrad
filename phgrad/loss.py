@@ -12,8 +12,8 @@ def nllloss(inputs: Tensor, targets: Tensor, reduce="mean"):
         Scalar value of the loss.
     """
     assert reduce in ["mean", "sum"], "Invalid reduce"
-    assert inputs.dims == 2, "Invalid input shape"
-    assert targets.dims <= 2, "Invalid target shape"
+    # assert inputs.dims == 2, "Invalid input shape"
+    # assert targets.dims <= 2, "Invalid target shape"
 
     indices = (
         Tensor.arange(inputs.shape[0], device=inputs.device) * inputs.shape[1] + targets

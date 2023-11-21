@@ -290,6 +290,9 @@ class Tensor:
     def argmax(self, dim: Optional[int] = None):
         return self.backend.argmax(self, dim=dim)
 
+    def squeeze(self, dim: Optional[int] = None):
+        return self.backend.squeeze(self, dim=dim)
+
     @classmethod
     def eye(
         cls: Type["Tensor"],
