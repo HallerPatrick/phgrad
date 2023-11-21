@@ -24,4 +24,3 @@ def one_hot(tensor: Tensor, num_classes: Optional[int] = None) -> Tensor:
     out = Tensor.zeros(out_shape, device=tensor.device)
     out.scatter_add(index_tensor, 1, axis=-1)
     return out
-

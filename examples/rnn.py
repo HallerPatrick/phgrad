@@ -27,7 +27,6 @@ class LM(Module):
 
     def forward(self, x: Tensor, hidden_state: Tensor) -> Tuple[Tensor, Tensor]:
         x = self.embedding(x)
-        print("embedding", x.shape)
         x, hidden_state = self.rnn(x, hidden_state)
         x = self.decoder(x)
         return x, hidden_state
@@ -50,40 +49,34 @@ def main():
     hidden_state = Tensor(np.zeros((1, 256), dtype=np.float32))
     
     for _ in range(epochs):
-        pbar = tqdm(range(0, len(text_as_int) - 600000 - seq_length, seq_length))
+        pbar = tqdm(range(0, len(text_as_int) - 100000 - seq_length, seq_length))
         for i in pbar:
             optimizer.zero_grad()
             sequence = Tensor([text_as_int[i : i + seq_length]], dtype=phtypes.int64)
             target_sequence = Tensor([text_as_int[i + 1 : i + seq_length + 1]], dtype=phtypes.int64)
-            print(sequence.shape, hidden_state.shape)
             res, hidden_state = model(sequence, hidden_state)
-            # print(res.shape, target_sequence.shape)
-            # print(res, sequence, target_sequence)
             res = res.log_softmax(dim=1)
-            # exit()
             loss = nllloss(res, target_sequence, reduce="mean")
             loss.backward()
             optimizer.step()
             hidden_state = hidden_state.detach()
 
-            pbar.set_description(f"Loss: {loss.first_item:.3f}")
+            pbar.set_description(f"Loss: {loss.first_item[0]:.3f}")
 
     # Generate some text
     current_text = "I "
 
-    hidden_state = Tensor(np.zeros((256), dtype=np.float32))
+    hidden_state = Tensor(np.zeros((1, 256), dtype=np.float32))
 
     print("Input:", current_text, end="")
 
-    for i in range(10):
-        sequence = Tensor([char2idx[c] for c in current_text], dtype=phtypes.int64)
+    for i in range(1000):
+        sequence = Tensor([[char2idx[c] for c in current_text]], dtype=phtypes.int64)
         res, hidden_state = model(sequence, hidden_state)
-        print(hidden_state.shape)
-        res = res.softmax(dim=1)
+        res = res.softmax(dim=2)
         res = res.detach().numpy()[0]
-        idx = np.argmax(res)
+        idx = np.argmax(res[-1, :])
         current_text += idx2char[idx]
-        # print(idx2char[idx], end="")
         print(current_text)
 
 

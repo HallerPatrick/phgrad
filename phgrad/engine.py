@@ -243,8 +243,12 @@ class Tensor:
 
     @property
     def T(self) -> "Tensor":
-        """Return the transpose of the tensor."""
-        return self.transpose((1, 0))
+        dims = self.dims
+
+        if dims == 2:
+            return self.transpose((1, 0))
+
+        return self.transpose((0, 2, 1))
 
     def reshape(self, shape: Union[int, Tuple[int]]) -> "Tensor":
         return self.backend.reshape(self, shape=shape)
@@ -359,3 +363,16 @@ class Tensor:
             _backend=backend,
         )
 
+    @classmethod
+    def stack(
+        cls: Type["Tensor"],
+        tensors: Tuple["Tensor"],
+        dim: int = 0,
+    ):
+        backend = tensors[0].backend
+        return cls(
+            backend.stack([t.data for t in tensors], dim=dim),
+            requires_grad=tensors[0].requires_grad,
+            device=tensors[0].device,
+            _backend=backend,
+        )

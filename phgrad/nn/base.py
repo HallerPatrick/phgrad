@@ -2,6 +2,7 @@ from typing import Any
 
 from phgrad.engine import Tensor
 
+
 class Module:
     """Base class for all modules."""
 
@@ -39,7 +40,7 @@ class Module:
     def train(self):
         """Set the module in training mode.
         As far as I am concerned, this is only useful for Dropout or some other
-        layers that behave differently during training and evaluation and 
+        layers that behave differently during training and evaluation and
         has nothing to do with saving gradients.
         """
         self.training = True

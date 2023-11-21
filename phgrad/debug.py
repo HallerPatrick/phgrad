@@ -8,6 +8,7 @@ backward_time = defaultdict(int)
 
 DEBUG = int(os.getenv("DEBUG", 0))
 
+
 def compressed_progress_bar(execution_time, total_time):
     """
     Generates a compressed progress bar with different characters representing different ranges.
@@ -28,7 +29,7 @@ def compressed_progress_bar(execution_time, total_time):
     if full_chars < bar_max:
         bar += symbols[partial_char_index] + symbols[0] * (bar_max - full_chars - 1)
 
-    return '[' + bar + '] ' + f'{percentage:.1f}%'
+    return "[" + bar + "] " + f"{percentage:.1f}%"
 
 
 def print_summary():
@@ -38,19 +39,18 @@ def print_summary():
         print(f"\t{k}: {v}")
     print(f"Total tensors: {sum(tensor_creations.values())}")
 
-
-
     print("2. Func calls")
     for k, v in func_calls.items():
         print(f"\t{k}: {v}")
     print(f"Total func calls: {sum(func_calls.values())}")
 
-
-
     print("3. Forward time")
     total_time = sum(forward_time.values())
     # Sort by largest time
-    forward_time_ = {k: v for k, v in sorted(forward_time.items(), key=lambda item: item[1], reverse=True)}
+    forward_time_ = {
+        k: v
+        for k, v in sorted(forward_time.items(), key=lambda item: item[1], reverse=True)
+    }
     for k, v in forward_time_.items():
         k = k.replace("class 'phgrad.backends.", "").replace("'", "")
         print(f"\t{k:>20}: {v:.3f} ({compressed_progress_bar(v, total_time)})")
@@ -58,10 +58,14 @@ def print_summary():
     print(f"Total forward time: {sum(forward_time.values())}")
 
     total_time = sum(backward_time.values())
-    backward_time_ = {k: v for k, v in sorted(backward_time.items(), key=lambda item: item[1], reverse=True)}
+    backward_time_ = {
+        k: v
+        for k, v in sorted(
+            backward_time.items(), key=lambda item: item[1], reverse=True
+        )
+    }
     print("4. Backward time")
     for k, v in backward_time_.items():
         print(f"\t{k:>20}: {v:.3f} ({compressed_progress_bar(v, total_time)})")
 
     print(f"Total backward time: {sum(backward_time.values())}")
-

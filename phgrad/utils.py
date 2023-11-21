@@ -3,11 +3,14 @@ from typing import get_type_hints
 from functools import partialmethod
 import GPUtil
 
+
 def has_cuda_support() -> bool:
     return len(GPUtil.getAvailable()) > 0
 
+
 def cuda_available_devices() -> list:
     return GPUtil.getAvailable()
+
 
 def register(name, fxn, cls):
     partial_method = partialmethod(fxn.apply, fxn)
@@ -117,4 +120,3 @@ def generate_stub_for_class(cls, filename):
 
     with open(stub_filename, "w") as stub_file:
         stub_file.write(stub_content)
-

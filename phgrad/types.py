@@ -3,17 +3,18 @@ from enum import Enum, auto
 
 class _DType(Enum):
     """Our wrapper for backend data types"""
+
     bool = auto()
-    float32 = auto() # float
-    float64 = auto() # double
-    int8 = auto() # byte
+    float32 = auto()  # float
+    float64 = auto()  # double
+    int8 = auto()  # byte
     uint8 = auto()
     int16 = auto()
     int32 = auto()
     int64 = auto()
 
-class DType:
 
+class DType:
     def __init__(self, dtype: _DType):
         self._dtype = dtype
 

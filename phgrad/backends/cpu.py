@@ -264,59 +264,37 @@ class Div(CPUFunction):
 
 class MatMul(CPUFunction):
     @staticmethod
-    def forward(ctx, self: np.ndarray, tensor: np.ndarray) -> np.ndarray:
-        """Matrix multiplication of two tensors."""
-
-        if self.ndim == 2 and tensor.ndim == 2:
-            # Both inputs are matrices
-            if self.shape[-1] != tensor.shape[-2]:
-                raise ValueError("Incompatible dimensions for matrix multiplication.")
-        elif self.ndim == 2 and tensor.ndim == 1:
-            # Matrix and vector multiplication
-            if self.shape[-1] != tensor.shape[0]:
-                raise ValueError(
-                    "Incompatible dimensions for matrix-vector multiplication."
-                )
-        elif self.ndim == 1 and tensor.ndim == 2:
-            # Vector and matrix multiplication
-            if self.shape[0] != tensor.shape[-2]:
-                raise ValueError(
-                    "Incompatible dimensions for vector-matrix multiplication."
-                )
-        else:
-            raise ValueError(
-                f"Unsupported input dimensions for multiplication. \
-Only matrix-vector and matrix-matrix multiplication are supported. \
-Received input dimensions: {self.ndim} and {tensor.ndim}"
-            )
-
-        ctx.save_forward_context(self, tensor)
-        return self @ tensor
+    def forward(ctx, input: np.ndarray, weight: np.ndarray) -> np.ndarray:
+        ctx.save_forward_context(input, weight)
+        return np.matmul(input, weight)
 
     @staticmethod
     def backward(ctx, grad_output: np.ndarray):
         input, weight = ctx.forward_context
 
-        # Adjust backward computation for matrix-vector and matrix-matrix multiplication
-        if input.ndim == 1 and weight.ndim == 2:
-            # Vector-matrix multiplication
-            grad_input = grad_output @ weight.T
-            grad_weight = np.outer(input, grad_output)
-        elif input.ndim == 2 and weight.ndim == 1:
-            # Matrix-vector multiplication
-            grad_input = np.outer(grad_output, weight)
-            grad_weight = input.T @ grad_output
-        elif input.ndim == 2 and weight.ndim == 2:
-            # Matrix-matrix multiplication
-            grad_input = grad_output @ weight.T
-            grad_weight = input.T @ grad_output
+        # Calculate grad_input
+        if weight.ndim > 1:
+            # For multi-dimensional weight, transpose the last two dimensions
+            axes = np.arange(weight.ndim)
+            axes[-1], axes[-2] = axes[-2], axes[-1]
+            grad_input = np.matmul(grad_output, weight.transpose(axes))
         else:
-            raise ValueError("Unsupported input dimensions for gradient computation.")
-        # Apply unbroadcast to gradients if necessary
-        grad_input = unbroadcast(grad_input, input.shape)
-        grad_weight = unbroadcast(grad_weight, weight.shape)
+            # For vector weight, simply use the vector as-is
+            grad_input = np.matmul(grad_output, weight.T)
 
-        return grad_input, grad_weight
+        # Calculate grad_weight
+        if input.ndim > 1:
+            # For multi-dimensional input, transpose the last two dimensions
+            axes = np.arange(input.ndim)
+            axes[-1], axes[-2] = axes[-2], axes[-1]
+            grad_weight = np.matmul(input.transpose(axes), grad_output)
+        else:
+            # For vector input, simply use the vector as-is
+            grad_weight = np.matmul(input.T, grad_output)
+
+        return unbroadcast(grad_input, input.shape), unbroadcast(
+            grad_weight, weight.shape
+        )
 
 
 # class Pow(Function):
@@ -746,6 +724,10 @@ def arange(start: int, stop: int, step: int = 1) -> np.ndarray:
     return np.arange(start, stop, step)
 
 
+def stack(tensors: Tuple[np.ndarray], dim: int = 0) -> np.ndarray:
+    return np.stack(tensors, axis=dim)
+
+
 def attach_op(function: Type[CPUFunction]):
     return partial(function.apply, function)
 
@@ -798,4 +780,5 @@ factories = {
     "ones": ones,
     "zeros": zeros,
     "arange": arange,
+    "stack": stack,
 }
