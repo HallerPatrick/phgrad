@@ -21,10 +21,9 @@ class RNN(Module):
         self.hid2out = Linear(hidden_size, hidden_size, device=device)
 
     def forward(self, inp: Tensor, hidden_state: Tensor):
-        combined = self.in2hidden(inp).add(self.hid2hid(hidden_state))
+        # combined = self.in2hidden(inp).add(self.hid2hid(hidden_state))
+        combined = self.in2hidden(inp) + self.hid2hid(hidden_state)
         next_hidden = combined.tanh()
-        print(combined.shape)
-        print(next_hidden.shape)
         logits = self.hid2out(next_hidden)
         return logits, next_hidden
 

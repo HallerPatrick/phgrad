@@ -7,7 +7,7 @@ from utils import requires_torch
 
 from phgrad import futils
 from phgrad.engine import Tensor as Tensor
-from phgrad.backends.cpu import LogSoftmax
+from phgrad.backends.cpu import LogSoftmax, MatMul
 
 
 class TestReshape(unittest.TestCase):
@@ -18,11 +18,13 @@ class TestReshape(unittest.TestCase):
         assert isinstance(tensor.data, np.ndarray)
         assert tensor.data.shape == (2, 3)
 
+
 @requires_torch
 class TestAddOperation(unittest.TestCase):
     def test_add_forward(self):
         """Test the forward pass of the addition operation."""
         import torch
+
         x_np = np.random.rand(2, 3)
         y_np = np.random.rand(2, 3)
 
@@ -44,6 +46,7 @@ class TestAddOperation(unittest.TestCase):
     def test_add_backward(self):
         """Test the backward pass of the addition operation."""
         import torch
+
         x_np = np.random.rand(2, 3)
         y_np = np.random.rand(2, 3)
         grad_output_np = np.random.rand(2, 3)
@@ -359,5 +362,44 @@ class TestScatterAdd(unittest.TestCase):
         assert t.grad == np.array([1])
 
 
+class TestMatMul(unittest.TestCase):
+    def test_square_matrices_multiplication(self):
+        input = np.random.randn(3, 3)
+        weight = np.random.randn(3, 3)
+        grad_output = np.random.randn(3, 3)
 
+        ctx = MatMul()
+        output = MatMul.forward(ctx, input, weight)
+        self.assertTrue(np.allclose(output, np.matmul(input, weight)))
 
+        grad_input, grad_weight = MatMul.backward(ctx, grad_output)
+        self.assertEqual(grad_input.shape, input.shape)
+        self.assertEqual(grad_weight.shape, weight.shape)
+
+    def test_matrix_vector_multiplication(self):
+        input = np.random.randn(3, 3)
+        weight = np.random.randn(3)
+        grad_output = np.random.randn(3)
+
+        ctx = MatMul()
+        output = MatMul.forward(ctx, input, weight)
+        self.assertTrue(np.allclose(output, np.matmul(input, weight)))
+
+        grad_input, grad_weight = MatMul.backward(ctx, grad_output)
+        self.assertEqual(
+            grad_input.shape,
+            input.shape,
+            "Grad input shape mismatch in matrix-vector multiplication",
+        )
+        self.assertEqual(
+            grad_weight.shape,
+            weight.shape,
+            "Grad weight shape mismatch in matrix-vector multiplication",
+        )
+
+    def test_incompatible_shapes(self):
+        input = np.random.randn(2, 3)
+        weight = np.random.randn(4, 5)
+        with self.assertRaises(ValueError):
+            ctx = MatMul()
+            MatMul.forward(ctx, input, weight)

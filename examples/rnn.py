@@ -27,11 +27,9 @@ class LM(Module):
 
     def forward(self, x: Tensor, hidden_state: Tensor) -> Tuple[Tensor, Tensor]:
         x = self.embedding(x)
+        print("embedding", x.shape)
         x, hidden_state = self.rnn(x, hidden_state)
-        print("Logits", x.shape)
-        print("Hidden", hidden_state.shape)
         x = self.decoder(x)
-        print(x.shape)
         return x, hidden_state
 
 
@@ -43,20 +41,21 @@ def main():
     idx2char = np.array(vocab)
     text_as_int = np.array([char2idx[c] for c in text])
     
-    epochs = 10
-    seq_length = 100
+    epochs = 1
+    seq_length = 250
 
     model = LM(len(vocab), 256, 256)
     optimizer = SGD(model.parameters(), lr=0.1)
 
-    hidden_state = Tensor(np.zeros((256), dtype=np.float32))
+    hidden_state = Tensor(np.zeros((1, 256), dtype=np.float32))
     
     for _ in range(epochs):
-        pbar = tqdm(range(0, len(text_as_int) - seq_length, seq_length))
+        pbar = tqdm(range(0, len(text_as_int) - 600000 - seq_length, seq_length))
         for i in pbar:
             optimizer.zero_grad()
-            sequence = Tensor(text_as_int[i : i + seq_length], dtype=phtypes.int64)
-            target_sequence = Tensor(text_as_int[i + 1 : i + seq_length + 1], dtype=phtypes.int64)
+            sequence = Tensor([text_as_int[i : i + seq_length]], dtype=phtypes.int64)
+            target_sequence = Tensor([text_as_int[i + 1 : i + seq_length + 1]], dtype=phtypes.int64)
+            print(sequence.shape, hidden_state.shape)
             res, hidden_state = model(sequence, hidden_state)
             # print(res.shape, target_sequence.shape)
             # print(res, sequence, target_sequence)
@@ -79,9 +78,8 @@ def main():
     for i in range(10):
         sequence = Tensor([char2idx[c] for c in current_text], dtype=phtypes.int64)
         res, hidden_state = model(sequence, hidden_state)
-        print(res.shape)
+        print(hidden_state.shape)
         res = res.softmax(dim=1)
-        print(res)
         res = res.detach().numpy()[0]
         idx = np.argmax(res)
         current_text += idx2char[idx]

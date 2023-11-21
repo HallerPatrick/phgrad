@@ -21,6 +21,7 @@ from functools import partial
 import numpy as np
 
 from .. import debug
+
 # from ..types import DType, _DType
 from .. import types
 
@@ -40,14 +41,18 @@ def init_data(data: Any, type: types.DType) -> BackendTensor:
 
     return data
 
+
 def copy(data: BackendTensor) -> BackendTensor:
     return data.copy()
+
 
 def numpy(data: BackendTensor) -> BackendTensor:
     return data
 
+
 def to_dtype(data: BackendTensor, dtype: Type) -> BackendTensor:
     return data.astype(dtype)
+
 
 def to_backend_type(frontend_type: types.DType) -> np.dtype:
     match frontend_type:
@@ -69,6 +74,7 @@ def to_backend_type(frontend_type: types.DType) -> np.dtype:
             return np.int64
         case _:  # noqa
             raise ValueError(f"Unknown dtype {frontend_type}")
+
 
 class CPUFunction:
     """Our CPU backend. Mostly based on numpy.
@@ -103,7 +109,6 @@ class CPUFunction:
         # Why are we even converting to a tensor in the first place?
         passing_args = []
         for t in x:
-
             if isinstance(t, np.ndarray):
                 passing_args.append(t)
             # TODO: Find a better way to find out if this is a tensor
@@ -112,15 +117,14 @@ class CPUFunction:
             else:
                 passing_args.append(t)
 
-        
         if debug.DEBUG == 1:
             debug.func_calls[str(op_function)] += 1
             time_start = time.time()
 
         ret = op_function.forward(ctx, *passing_args, **kwargs)  # type: ignore
-        
+
         if debug.DEBUG == 1:
-            debug.forward_time[str(op_function)] += (time.time() - time_start)
+            debug.forward_time[str(op_function)] += time.time() - time_start
 
         return ret, ctx, ctx.differentiable
 
@@ -258,6 +262,63 @@ class Div(CPUFunction):
         )
 
 
+class MatMul(CPUFunction):
+    @staticmethod
+    def forward(ctx, self: np.ndarray, tensor: np.ndarray) -> np.ndarray:
+        """Matrix multiplication of two tensors."""
+
+        if self.ndim == 2 and tensor.ndim == 2:
+            # Both inputs are matrices
+            if self.shape[-1] != tensor.shape[-2]:
+                raise ValueError("Incompatible dimensions for matrix multiplication.")
+        elif self.ndim == 2 and tensor.ndim == 1:
+            # Matrix and vector multiplication
+            if self.shape[-1] != tensor.shape[0]:
+                raise ValueError(
+                    "Incompatible dimensions for matrix-vector multiplication."
+                )
+        elif self.ndim == 1 and tensor.ndim == 2:
+            # Vector and matrix multiplication
+            if self.shape[0] != tensor.shape[-2]:
+                raise ValueError(
+                    "Incompatible dimensions for vector-matrix multiplication."
+                )
+        else:
+            raise ValueError(
+                f"Unsupported input dimensions for multiplication. \
+Only matrix-vector and matrix-matrix multiplication are supported. \
+Received input dimensions: {self.ndim} and {tensor.ndim}"
+            )
+
+        ctx.save_forward_context(self, tensor)
+        return self @ tensor
+
+    @staticmethod
+    def backward(ctx, grad_output: np.ndarray):
+        input, weight = ctx.forward_context
+
+        # Adjust backward computation for matrix-vector and matrix-matrix multiplication
+        if input.ndim == 1 and weight.ndim == 2:
+            # Vector-matrix multiplication
+            grad_input = grad_output @ weight.T
+            grad_weight = np.outer(input, grad_output)
+        elif input.ndim == 2 and weight.ndim == 1:
+            # Matrix-vector multiplication
+            grad_input = np.outer(grad_output, weight)
+            grad_weight = input.T @ grad_output
+        elif input.ndim == 2 and weight.ndim == 2:
+            # Matrix-matrix multiplication
+            grad_input = grad_output @ weight.T
+            grad_weight = input.T @ grad_output
+        else:
+            raise ValueError("Unsupported input dimensions for gradient computation.")
+        # Apply unbroadcast to gradients if necessary
+        grad_input = unbroadcast(grad_input, input.shape)
+        grad_weight = unbroadcast(grad_weight, weight.shape)
+
+        return grad_input, grad_weight
+
+
 # class Pow(Function):
 #     @staticmethod
 #     def forward(ctx, *args, **_):
@@ -381,43 +442,6 @@ class Max(CPUFunction):
         return grad_output * np.ones_like(input_tensor)
 
 
-# class MatMul(CPUFunction):
-#     @staticmethod
-#     def forward(ctx, self: np.ndarray, tensor: np.ndarray) -> np.ndarray:
-#         """Matrix multiplication of two tensors."""
-#         ctx.save_forward_context(self, tensor)
-#         # TODO: Handle overflow
-#         return self @ tensor
-#
-#     @staticmethod
-#     def backward(ctx, grad_output: np.ndarray):
-#         input, weight = ctx.forward_context
-#         grad_input = grad_output @ np.swapaxes(weight, -2, -1)
-#         grad_weight = np.swapaxes(input, -2, -1) @ grad_output
-#         return grad_input, grad_weight
-#
-# import numpy as np
-
-class MatMul(CPUFunction):
-    @staticmethod
-    def forward(ctx, self: np.ndarray, tensor: np.ndarray) -> np.ndarray:
-        """Matrix multiplication of two tensors."""
-        if self.shape[-1] != tensor.shape[-2]:
-            raise ValueError("Incompatible dimensions for matrix multiplication.")
-        ctx.save_forward_context(self, tensor)
-        return self @ tensor
-
-    @staticmethod
-    def backward(ctx, grad_output: np.ndarray):
-        input, weight = ctx.forward_context
-        if grad_output.shape[-1] != weight.shape[-1]:
-            raise ValueError("Gradient output dimensions do not match weight dimensions.")
-        grad_input = grad_output @ weight.T
-        grad_weight = input.T @ grad_output
-        print(grad_input.shape, grad_weight.shape)
-        return grad_input, grad_weight
-
-
 class Log(CPUFunction):
     @staticmethod
     def forward(ctx, self: np.ndarray) -> np.ndarray:
@@ -508,8 +532,8 @@ class Sigmoid(CPUFunction):
     def backward(ctx, grad_output: np.ndarray):
         return grad_output * ctx.result * (1 - ctx.result)
 
-class TanH(CPUFunction):
 
+class TanH(CPUFunction):
     @staticmethod
     def forward(ctx, self: np.ndarray) -> np.ndarray:
         """Tanh of a tensor."""
@@ -520,7 +544,8 @@ class TanH(CPUFunction):
 
     @staticmethod
     def backward(ctx, grad_output: np.ndarray):
-        return grad_output * (1 - ctx.result ** 2)
+        return grad_output * (1 - ctx.result**2)
+
 
 class GetItem(CPUFunction):
     @staticmethod
@@ -574,7 +599,7 @@ class Flatten(CPUFunction):
     @staticmethod
     def forward(ctx, self: np.ndarray) -> np.ndarray:
         ctx.save_forward_context(self)
-        res =  np.reshape(self, (self.shape[0], -1))
+        res = np.reshape(self, (self.shape[0], -1))
         return res
 
     @staticmethod
@@ -592,7 +617,9 @@ class Take(CPUFunction):
     @staticmethod
     def forward(ctx, self: np.ndarray, indices: np.ndarray) -> np.ndarray:
         """Take elements from a tensor using indices."""
-        assert indices.dtype == np.int64 or indices.dtype == bool, f"Indices must be of type int64 or bool, got {indices.dtype}"
+        assert (
+            indices.dtype == np.int64 or indices.dtype == bool
+        ), f"Indices must be of type int64 or bool, got {indices.dtype}"
         ctx.save_forward_context(self)
         ctx.indices = indices
         # Assume indices are for the first dimension
@@ -651,10 +678,9 @@ class Cat(CPUFunction):
 
     @staticmethod
     def backward(ctx, grad_output: np.ndarray):
-
         # grads = np.split(grad_output, np.cumsum(ctx.shapes)[:-1], axis=ctx.axis)
         # return tuple(grads)
-    
+
         axis = ctx.axis
         # Calculate the indices for splitting
         split_sizes = [shape[axis] for shape in ctx.shapes]
@@ -715,20 +741,29 @@ def zeros(shape: Tuple[int]) -> np.ndarray:
     """
     return np.zeros(shape)
 
+
 def arange(start: int, stop: int, step: int = 1) -> np.ndarray:
     return np.arange(start, stop, step)
+
 
 def attach_op(function: Type[CPUFunction]):
     return partial(function.apply, function)
 
-def scatter_add(tensor: BackendTensor, indices: BackendTensor, values: BackendTensor, axis: Optional[int] = None):
+
+def scatter_add(
+    tensor: BackendTensor,
+    indices: BackendTensor,
+    values: BackendTensor,
+    axis: Optional[int] = None,
+):
     return np.put_along_axis(tensor, indices, values, axis)
+
 
 funcs = {
     "init_data": init_data,
     "copy": copy,
     "numpy": numpy,
-    "scatter_add": scatter_add
+    "scatter_add": scatter_add,
 }
 
 ops_map = {
