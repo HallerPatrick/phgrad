@@ -63,7 +63,7 @@ def main():
             pbar.set_description(f"Loss: {loss.first_item:.3f}")
 
     # Generate some text
-    input_ids = text_as_int[0 : 0 + seq_length]
+    input_ids = text_as_int[:seq_length]
     current_text = "".join(idx2char[input_ids])
     # current_text = "I hurt myself"
 
@@ -72,12 +72,11 @@ def main():
     print("Input:", current_text, end="")
     print("=====")
 
-    for i in range(10):
+    for i in range(100):
         # sequence = Tensor([text_as_int[i : i + seq_length + 1]], dtype=phtypes.int64)
         sequence = Tensor([[char2idx[c] for c in current_text]], dtype=phtypes.int64)
         res, hidden_state = model(sequence, hidden_state)
-        res = res.squeeze(dim=0).softmax(dim=-1)
-        res = res[-1, :]
+        res = res.squeeze(dim=0)[-1, :].softmax(dim=-1)
         # Take the last character
         idx = res.argmax().detach().numpy()
         current_text += idx2char[int(idx)]
