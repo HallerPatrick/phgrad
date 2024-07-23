@@ -851,6 +851,10 @@ def stack(tensors: Tuple[np.ndarray], dim: int = 0) -> np.ndarray:
     return np.stack(tensors, axis=dim)
 
 
+def cat(tensors: Tuple[np.ndarray], dim: int = 0) -> np.ndarray:
+    return np.concatenate(tensors, axis=dim)
+
+
 def attach_op(function: Type[CPUFunction]):
     return partial(function.apply, function)
 
@@ -904,7 +908,7 @@ ops_map = {
     "transpose": attach_op(Transpose),
     "reshape": attach_op(Reshape),
     "flatten": attach_op(Flatten),
-    "cat": attach_op(Cat),
+    # "cat": attach_op(Cat),
     "argmax": attach_op(ArgMax),
     "squeeze": attach_op(Squeeze),
     "unsqueeze": attach_op(Unsqueeze),
@@ -919,4 +923,5 @@ factories = {
     "zeros": zeros,
     "arange": arange,
     "stack": stack,
+    "cat": cat,
 }

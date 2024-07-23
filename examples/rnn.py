@@ -11,7 +11,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from phgrad import Tensor
 from phgrad.nn import Embedding, Module, Linear
-from phgrad.nn.rnn import RNN
+from phgrad.nn.rnn import RNN, LSTM
 from phgrad import types as phtypes
 from phgrad.loss import nllloss
 from phgrad.optim import SGD
@@ -24,6 +24,7 @@ class LM(Module):
         super().__init__()
         self.embedding = Embedding(vocab_size, embedding_dim)
         self.rnn = RNN(embedding_dim, hidden_size)
+        # self.rnn = LSTM(embedding_dim, hidden_size)
         self.decoder = Linear(hidden_size, vocab_size)
 
     def forward(self, x: Tensor, hidden_state: Tensor) -> Tuple[Tensor, Tensor]:
@@ -40,13 +41,14 @@ def main(device: str):
     idx2char = np.array(vocab)
     text_as_int = np.array([char2idx[c] for c in text])
 
-    epochs = 1
+    epochs = 10
     seq_length = 200
 
     model = LM(len(vocab), 256, 256).to(device)
-    optimizer = SGD(model.parameters(), lr=0.5)
+    optimizer = SGD(model.parameters(), lr=15 if isinstance(model.rnn, LSTM) else 0.5)
 
-    hidden_state = Tensor(np.zeros((1, 256), dtype=np.float32), device=device)
+    # hidden_state = Tensor(np.zeros((1, 256), dtype=np.float32), device=device)
+    hidden_state = model.rnn.init_hidden(1, device)
 
     for _ in range(epochs):
         pbar = tqdm(range(0, len(text_as_int) - 600000 - seq_length, seq_length))
@@ -67,14 +69,18 @@ def main(device: str):
             )
             loss.backward()
             optimizer.step()
-            hidden_state = hidden_state.detach()
+            if isinstance(hidden_state, tuple):
+                hidden_state = (hidden_state[0].detach(), hidden_state[1].detach())
+            else:
+                hidden_state = hidden_state.detach()
             pbar.set_description(f"Loss: {loss.first_item:.3f}")
 
     # Generate some text
     input_ids = text_as_int[:seq_length]
     current_text = "".join(idx2char[input_ids])
 
-    hidden_state = Tensor(np.zeros((1, 256), dtype=np.float32))
+    # hidden_state = Tensor(np.zeros((1, 256), dtype=np.float32))
+    hidden_state = model.rnn.init_hidden(1, device)
 
     print("Generate text based (continuation is bold and green):", current_text, end="")
 

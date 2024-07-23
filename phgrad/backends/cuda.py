@@ -817,6 +817,10 @@ def stack(tensors: Tuple[cp.ndarray], dim: int = 0) -> cp.ndarray:
     return cp.stack(tensors, axis=dim)
 
 
+def cat(tensors: Tuple[cp.ndarray], dim: int = 0) -> cp.ndarray:
+    return cp.concatenate(tensors, axis=dim)
+
+
 # Factories
 def eye(n: int, m: Optional[int] = None) -> cp.ndarray:
     """Create an identity matrix.
@@ -918,4 +922,5 @@ factories = {
     "zeros": zeros,
     "arange": arange,
     "stack": stack,
+    "cat": cat,
 }
