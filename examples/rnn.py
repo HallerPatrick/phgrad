@@ -21,11 +21,11 @@ from phgrad.debug import print_summary
 
 class LM(Module):
 
-    def __init__(self, vocab_size: int, embedding_dim: int, hidden_size: int, device="cpu"):
+    def __init__(self, vocab_size: int, embedding_dim: int, hidden_size: int):
         super().__init__()
-        self.embedding = Embedding(vocab_size, embedding_dim, device=device)
-        self.rnn = RNN(embedding_dim, hidden_size, device=device)
-        self.decoder = Linear(hidden_size, vocab_size, device=device)
+        self.embedding = Embedding(vocab_size, embedding_dim)
+        self.rnn = RNN(embedding_dim, hidden_size)
+        self.decoder = Linear(hidden_size, vocab_size)
 
     def forward(self, x: Tensor, hidden_state: Tensor) -> Tuple[Tensor, Tensor]:
         x = self.embedding(x)
@@ -50,29 +50,20 @@ def main(device: str):
 
     hidden_state = Tensor(np.zeros((1, 256), dtype=np.float32), device=device)
 
-    print_summary()
-    
     for _ in range(epochs):
         pbar = tqdm(range(0, len(text_as_int) - 600000 - seq_length, seq_length))
         for i in pbar:
             optimizer.zero_grad()
             sequence = Tensor([text_as_int[i : i + seq_length]], dtype=phtypes.int64, device=device)
             target_sequence = Tensor([text_as_int[i + 1 : i + seq_length + 1]], dtype=phtypes.int64, device=device)
-            print_summary()
-            breakpoint()
             res, hidden_state = model(sequence, hidden_state)
-            print_summary()
-            breakpoint()
             res = res.log_softmax(dim=-1)
             loss = nllloss(res.squeeze(dim=0), target_sequence.squeeze(dim=0), reduce="mean")
             loss.backward()
             optimizer.step()
             hidden_state = hidden_state.detach()
             pbar.set_description(f"Loss: {loss.first_item:.3f}")
-            print_summary()
-            breakpoint()
 
-    print_summary()
     # Generate some text
     input_ids = text_as_int[:seq_length]
     current_text = "".join(idx2char[input_ids])

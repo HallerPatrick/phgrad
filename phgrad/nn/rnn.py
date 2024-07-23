@@ -2,23 +2,18 @@ from typing import Optional
 
 from phgrad.engine import Tensor
 from phgrad.nn import Linear, Module
-from phgrad.debug import print_summary
 
 
 class RNNCell(Module):
-    def __init__(self, inp_dim: int, hidden_size: int, device: str = "cpu") -> None:
+    def __init__(self, inp_dim: int, hidden_size: int):
         super().__init__()
-        self.in2hidden = Linear(inp_dim, hidden_size, device=device)
-        self.hid2hid = Linear(hidden_size, hidden_size, device=device)
+        self.in2hidden = Linear(inp_dim, hidden_size)
+        self.hid2hid = Linear(hidden_size, hidden_size)
 
     def forward(self, inp: Tensor, hidden_state: Tensor):
         # inp: [batch_size, num_features]
-        print_summary()
-        breakpoint()
         combined = self.in2hidden(inp) + self.hid2hid(hidden_state)
         hidden_state = combined.tanh()
-        print_summary()
-        breakpoint()
         return hidden_state
 
 
@@ -34,12 +29,12 @@ class RNN(Module):
     Ref: https://pytorch.org/docs/stable/_modules/torch/nn/modules/rnn.html#RNN
     """
 
-    def __init__(self, inp_dim: int, hidden_size: int, device: str = "cpu") -> None:
+    def __init__(self, inp_dim: int, hidden_size: int):
         super().__init__()
         self.inp_dim = inp_dim
         self.hidden_size = hidden_size
         self.device = device
-        self.cell = RNNCell(inp_dim, hidden_size, device=device)
+        self.cell = RNNCell(inp_dim, hidden_size)
 
     def forward(self, inp: Tensor, hidden_state: Optional[Tensor] = None):
         """Forward pass.
