@@ -41,11 +41,15 @@ def main(device: str):
     idx2char = np.array(vocab)
     text_as_int = np.array([char2idx[c] for c in text])
 
-    epochs = 10
+
     seq_length = 200
 
     model = LM(len(vocab), 256, 256).to(device)
-    optimizer = SGD(model.parameters(), lr=15 if isinstance(model.rnn, LSTM) else 0.5)
+
+    is_lstm = isinstance(model.rnn, LSTM)
+    epochs = 10 if is_lstm else 1
+
+    optimizer = SGD(model.parameters(), lr=15 if is_lstm else 0.5)
 
     # hidden_state = Tensor(np.zeros((1, 256), dtype=np.float32), device=device)
     hidden_state = model.rnn.init_hidden(1, device)

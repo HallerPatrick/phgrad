@@ -61,9 +61,9 @@ class LSTMCell(Module):
     def __init__(self, inp_dim: int, hidden_size: int):
         super().__init__()
         self.forget_gate = Linear(inp_dim + hidden_size, hidden_size)
-        self.input_gate =  Linear(inp_dim + hidden_size, hidden_size)
+        self.input_gate = Linear(inp_dim + hidden_size, hidden_size)
         self.output_gate = Linear(inp_dim + hidden_size, hidden_size)
-        self.cell_gate =   Linear(inp_dim + hidden_size, hidden_size)
+        self.cell_gate = Linear(inp_dim + hidden_size, hidden_size)
 
     def forward(self, inp: Tensor, hidden_state: Tuple[Tensor]):
         h_prev, c_prev = hidden_state
@@ -82,7 +82,6 @@ class LSTMCell(Module):
 
 
 class LSTM(Module):
-
     def __init__(self, inp_dim: int, hidden_size: int):
         super().__init__()
         self.inp_dim = inp_dim
@@ -109,6 +108,3 @@ class LSTM(Module):
             Tensor.zeros((batch_size, self.hidden_size), device=device),
             Tensor.zeros((batch_size, self.hidden_size), device=device),
         )
-
-
-

@@ -267,8 +267,8 @@ class Tensor:
     def take(self, indices: "Tensor") -> "Tensor":
         return self.backend.take(self, indices)
 
-    def cat(self, others: Tuple["Tensor"], dim: Optional[int] = None) -> "Tensor":
-        return self.backend.cat(self, others, dim=dim)
+    # def cat(self, others: Tuple["Tensor"], dim: Optional[int] = None) -> "Tensor":
+    #     return self.backend.cat(self, others, dim=dim)
 
     # TODO: Does not really feel like a proper op
     def dropout(self, p: float, training: bool) -> "Tensor":
