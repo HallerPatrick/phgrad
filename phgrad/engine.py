@@ -1,5 +1,6 @@
 import time
 from typing import Any, Optional, Tuple, Type, Union
+from collections import deque
 
 import numpy as np
 
@@ -31,6 +32,8 @@ class Tensor:
 
         if DEBUG == 1:
             tensor_creations[device] += 1
+            # if device == "cpu":
+            #     breakpoint()
 
         self.dtype = dtype
         self.data = self.backend.init_data(value, self.dtype)
@@ -55,64 +58,62 @@ class Tensor:
         return len(self.shape)
 
     def backward(self, allow_fill=True):
-        """Compute the gradient of this tensor.
-
-        Args:
-            allow_fill (bool, optional): Whether to fill the gradient with one if it is None. Defaults to True.
-            This is needed for implicit gradient creation.
-        """
         if self.ctx is None:
             return
 
-        if self.grad is None and allow_fill:
-            assert (
-                self.data.size == 1
-            ), f"Only tensors with size 1 can have None gradient, Tensor has size {self.data.size}"
-            self.grad = np.ones_like(self.data)
+        if self.grad is None:
+            if allow_fill:
+                if self.data.size != 1:
+                    raise ValueError(
+                        f"Only scalar tensors can have None gradient, "
+                        f"Tensor has size {self.data.size}"
+                    )
+                self.grad = np.ones_like(self.data)
+            else:
+                return
 
-        assert self.grad is not None
+        # Use a deque as a stack for depth-first traversal
+        stack = deque([(self, self.grad)])
 
-        if DEBUG == 1:
-            start_time = time.time()
+        while stack:
+            tensor, grad = stack.pop()
 
-        grads = self.ctx.backward(self.ctx, self.grad)
-
-        if DEBUG == 1:
-            backward_time[str(self.ctx)] += time.time() - start_time
-
-        if len(self.ctx.prev) == 1 or (not isinstance(grads, tuple)):
-            grads = [grads]
-
-        # Iterate over all previous tensors and set the gradient
-        if DEBUG == 2:
-            print("=== All Backward pass === ")
-            for t, g in zip(self.ctx.prev, grads):
-                if not isinstance(t, tuple):
-                    t = (t,)
-                print(
-                    f"Shapes: input {[x.shape for x in t]}, grad {g.shape}, op={self.ctx}"
-                )
-                print("grads:", grads)
-                print("Values:", t, g)
-                print("=======")
-
-        for t, g in zip(self.ctx.prev, grads):
-            if g is None:
+            if tensor.ctx is None:
                 continue
 
-            if isinstance(t, tuple):
-                t = t[0]
+            if DEBUG == 1:
+                start_time = time.time()
 
-            # What if the tensor value is a scalar?
-            # Check if tensor is a scalar and gradient has shape (1,)
-            if not (t.data.shape == () and g.shape == (1,)):
-                assert (
-                    g.shape == t.data.shape
-                ), "Grad shape must match tensor shape, {} != {} ({})".format(
-                    g.shape, t.data.shape, self.ctx
-                )
-            t.grad = g
-            t.backward(False)
+            grads = tensor.ctx.backward(tensor.ctx, grad)
+
+            if DEBUG == 1:
+                backward_time[str(self.ctx)] += time.time() - start_time
+
+            if not isinstance(grads, (tuple, list)):
+                grads = [grads]
+
+            for t, g in zip(tensor.ctx.prev, grads):
+                if g is None:
+                    continue
+
+                t = t[0] if isinstance(t, tuple) else t
+
+                if t.data.shape == () and g.shape == (1,):
+                    g = g.item()
+                elif g.shape != t.data.shape:
+                    raise ValueError(
+                        f"Grad shape must match tensor shape, "
+                        f"{g.shape} != {t.data.shape} ({tensor.ctx})"
+                    )
+
+                if t.grad is None:
+                    t.grad = g
+                else:
+                    t.grad += g
+
+                # Add to stack only if not already processed
+                if t.ctx is not None:
+                    stack.append((t, t.grad))
 
     def __str__(self) -> str:
         return f"Tensor({self.data}, grad_fn={self.ctx}, grad={self.grad})"
@@ -151,13 +152,14 @@ class Tensor:
         if self.device == device:
             return self
 
+        if DEBUG == 1:
+            tensor_creations[f"to_{device}"] += 1
+
         if in_place:
-            new_tensor = self.detach()
-            self = Tensor(
-                new_tensor.data,
-                device=device,
-                requires_grad=self.requires_grad,
-            )
+            backend = backend_from_device(device, Tensor)
+            self.backend = backend
+            self.device = device
+            self._move_data_to()
             return self
 
         return Tensor(
@@ -166,6 +168,12 @@ class Tensor:
             device=device,
             _backend=self.backend,
         )
+
+    def _move_data_to(self) -> None:
+        self.data = self.backend.move_to_backend(self.data)
+
+        if self.grad is not None:
+            self.grad = self.backend.move_to_backend(self.grad)
 
     def to_dtype(self, dtype: Type) -> "Tensor":
         return self.backend.to_dtype(self, dtype)
@@ -293,6 +301,12 @@ class Tensor:
     def squeeze(self, dim: Optional[int] = None):
         return self.backend.squeeze(self, dim=dim)
 
+    def unsqueeze(self, dim: int):
+        return self.backend.unsqueeze(self, dim=dim)
+
+    def cosine_similarity(self, other: "Tensor", dim: Optional[int] = 1):
+        return self.backend.cosine_similarity(self, other, dim=dim)
+
     @classmethod
     def eye(
         cls: Type["Tensor"],
@@ -379,3 +393,40 @@ class Tensor:
             device=tensors[0].device,
             _backend=backend,
         )
+
+    @classmethod
+    def _stack(
+        cls: Type["Tensor"],
+        tensors: Tuple["Tensor"],
+        dim: int = 0,
+    ):
+        return tensors[0]._stack_internal(tensors[1:], dim=dim)
+
+    def _stack_internal(self, tensors: Tuple["Tensor"], dim: int = 0):
+        """For simplicty (for now) lets implement it through cat"""
+
+        new_shape = list(self.shape)
+        new_shape.insert(dim, len(tensors) + 1)
+
+        result_tesors = ()
+        self = self.unsqueeze(dim=dim)
+
+        for t in tensors:
+            result_tesors += (t.unsqueeze(dim=dim),)
+
+        result = self.cat(result_tesors, dim=dim)
+
+        return result
+
+    def scatter(self, src: "Tensor", dim: int, index: "Tensor"):
+        """Scatter src into tensor at index along dim"""
+        return self.backend.scatter(self, index, src, dim)
+
+
+def stack(tensors: Tuple[Tensor], dim: int = 0):
+    # return tensors[0].backend.stack(tensors, dim=dim)
+    return tensors[0].backend.stack(tensors[0], tensors[1:], dim=dim)
+
+
+def cat(tensors: Tuple[Tensor], dim: int = 0):
+    return tensors[0].cat((*tensors[1:],), dim=dim)

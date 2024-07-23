@@ -405,14 +405,47 @@ class MatMul(CudaFunction):
         """Matrix multiplication of two tensors."""
         ctx.save_forward_context(self, tensor)
         # TODO: Handle overflow
-        return self @ tensor
+        return cp.matmul(self, tensor)
+
+    # @staticmethod
+    # def backward(ctx, grad_output: cp.ndarray):
+    #     input, weight = ctx.forward_context
+    #     grad_input = grad_output @ cp.swapaxes(weight, -2, -1)
+    #     grad_weight = cp.swapaxes(input, -2, -1) @ grad_output
+    #     return grad_input, grad_weight
 
     @staticmethod
     def backward(ctx, grad_output: cp.ndarray):
+        """Backward pass for matrix multiplication.
+        NOTE: We using numpy here for easy axis manipulation. This is not the most efficient
+        way to do it.
+        """
         input, weight = ctx.forward_context
-        grad_input = grad_output @ cp.swapaxes(weight, -2, -1)
-        grad_weight = cp.swapaxes(input, -2, -1) @ grad_output
-        return grad_input, grad_weight
+
+        # Calculate grad_input
+        if weight.ndim > 1:
+            # For multi-dimensional weight, transpose the last two dimensions
+            axes = np.arange(weight.ndim)
+            # axes[-2:] = axes[-2:][::-1]
+            axes[-1], axes[-2] = axes[-2], axes[-1]
+            grad_input = cp.matmul(grad_output, weight.transpose(tuple(axes)))
+        else:
+            # For vector weight, simply use the vector as-is
+            grad_input = cp.matmul(grad_output, weight.T)
+
+        # Calculate grad_weight
+        if input.ndim > 1:
+            # For multi-dimensional input, transpose the last two dimensions
+            axes = np.arange(input.ndim)
+            axes[-1], axes[-2] = axes[-2], axes[-1]
+            grad_weight = cp.matmul(input.transpose(tuple(axes)), grad_output)
+        else:
+            # For vector input, simply use the vector as-is
+            grad_weight = cp.matmul(input.T, grad_output)
+
+        return unbroadcast(grad_input, input.shape), unbroadcast(
+            grad_weight, weight.shape
+        )
 
 
 class Log(CudaFunction):
@@ -429,20 +462,20 @@ class Log(CudaFunction):
 
 
 class LogSoftmax(CudaFunction):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.forward_kernel, self.backward_kernel = _load_cuda_kernels(
-            "log_softmax", "log_softmax_forward", "log_softmax_backward"
-        )
+    # def __init__(self, *args, **kwargs):
+    #     super().__init__(*args, **kwargs)
+    #     self.forward_kernel, self.backward_kernel = _load_cuda_kernels(
+    #         "log_softmax", "log_softmax_forward", "log_softmax_backward"
+    #     )
 
-        # # Load the CUDA kernel
-        # with open(os.path.join(os.path.dirname(__file__), 'kernels/log_softmax.cu'), 'r') as f:
-        #     kernel_code = f.read()
-        #     self.forward_kernel = cp.RawKernel(kernel_code, 'log_softmax_forward')
-        #     self.backward_kernel = cp.RawKernel(kernel_code, 'log_softmax_backward')
+    # # Load the CUDA kernel
+    # with open(os.path.join(os.path.dirname(__file__), 'kernels/log_softmax.cu'), 'r') as f:
+    #     kernel_code = f.read()
+    #     self.forward_kernel = cp.RawKernel(kernel_code, 'log_softmax_forward')
+    #     self.backward_kernel = cp.RawKernel(kernel_code, 'log_softmax_backward')
 
     @staticmethod
-    def forward(ctx, self: cp.ndarray, dim: int = 0) -> cp.ndarray:
+    def _forward(ctx, self: cp.ndarray, dim: int = 0) -> cp.ndarray:
         if dim != -1 and dim != 1:
             raise NotImplementedError(
                 "Kernel only supports dim=-1 or dim=1 for 2D tensors."
@@ -458,14 +491,14 @@ class LogSoftmax(CudaFunction):
         return output
 
     @staticmethod
-    def _forward(ctx, self: cp.ndarray, dim: int = 0) -> cp.ndarray:
+    def forward(ctx, self: cp.ndarray, dim: int = 0) -> cp.ndarray:
         """Log softmax of a tensor."""
         ctx.save_forward_context(self)
         ctx.dim = dim
 
         # Shift the input for numerical stability
         x_max = self.max(axis=dim, keepdims=True)
-        shifted_logits = self - x_max
+        shifted_logits = cp.subtract(self, x_max, out=self)
 
         ctx.softmax_output = cp.exp(shifted_logits)
         ctx.softmax_sum = cp.sum(ctx.softmax_output, axis=dim, keepdims=True)
@@ -474,7 +507,7 @@ class LogSoftmax(CudaFunction):
         return log_softmax_output
 
     @staticmethod
-    def backward(ctx, grad_output: cp.ndarray):
+    def _backward(ctx, grad_output: cp.ndarray):
         # TODO: Maybe we can cache the softmax output and sum from the forward pass
         input_tensor = ctx.forward_context[0]
         rows, cols = input_tensor.shape
@@ -492,7 +525,7 @@ class LogSoftmax(CudaFunction):
         return grad_input
 
     @staticmethod
-    def _backward(ctx, grad_output: cp.ndarray):
+    def backward(ctx, grad_output: cp.ndarray):
         """Backward pass for log softmax."""
         dim = ctx.dim
 
@@ -509,14 +542,14 @@ class LogSoftmax(CudaFunction):
 
 
 class Softmax(CudaFunction):
-    def __init__(self, *tensors: Tuple[cp.ndarray]):
-        super().__init__(*tensors)
-        self.forward_kernel, self.backward_kernel = _load_cuda_kernels(
-            "softmax", "softmax_forward", "softmax_backward"
-        )
+    # def __init__(self, *tensors: Tuple[cp.ndarray]):
+    #     super().__init__(*tensors)
+    #     self.forward_kernel, self.backward_kernel = _load_cuda_kernels(
+    #         "softmax", "softmax_forward", "softmax_backward"
+    #     )
 
     @staticmethod
-    def forward(ctx, self: cp.ndarray, dim: int = 0) -> cp.ndarray:
+    def _forward(ctx, self: cp.ndarray, dim: int = 0) -> cp.ndarray:
         if dim != -1 and dim != 1:
             raise NotImplementedError(
                 "Kernel only supports dim=-1 or dim=1 for 2D tensors."
@@ -535,7 +568,28 @@ class Softmax(CudaFunction):
         return output
 
     @staticmethod
+    def forward(ctx, self: cp.ndarray, dim: int = 0) -> cp.ndarray:
+        """Softmax of a tensor."""
+        ctx.save_forward_context(self)
+        ctx.dim = dim
+        exps = cp.exp(self - self.max(axis=dim, keepdims=True))
+        output = exps / exps.sum(axis=dim, keepdims=True)
+        ctx.softmax_output = output
+        return output
+
+    @staticmethod
     def backward(ctx, grad_output: cp.ndarray):
+        """Backward pass for softmax"""
+        dim = ctx.dim
+        softmax_output = ctx.softmax_output
+        return (
+            grad_output
+            * softmax_output
+            * (1 - softmax_output.sum(axis=dim, keepdims=True))
+        )
+
+    @staticmethod
+    def _backward(ctx, grad_output: cp.ndarray):
         # dim = ctx.dim
         # exps = ctx.exps
         # return grad_output * exps * (1 - exps.sum(axis=dim))
@@ -618,6 +672,22 @@ class Flatten(CudaFunction):
         return cp.reshape(grad_output, input_shape)
 
 
+class GetItem(CudaFunction):
+    @staticmethod
+    def forward(ctx, tensor: np.ndarray, *, indices) -> np.ndarray:
+        """Get item using numpy-style indexing."""
+        ctx.save_forward_context(tensor.shape, indices)
+        return tensor[indices]
+
+    @staticmethod
+    def backward(ctx, grad_output: np.ndarray):
+        indices = ctx.forward_context.pop()
+        input_shape = ctx.forward_context.pop()
+        grad_input = cp.zeros(input_shape, dtype=grad_output.dtype)
+        cp.add.at(grad_input, indices, grad_output)
+        return grad_input
+
+
 class Take(CudaFunction):
     """Take function without a dimension parameter.
 
@@ -678,20 +748,45 @@ class Cat(CudaFunction):
         all_tensors = [self, *tensors]
         ctx.shapes = [t.shape for t in all_tensors]
         ctx.axis = dim
-
-        # NOTE: We are passing the tensor object down into the backend, I dont think we should do that
-        data = []
-        for t in all_tensors:
+        all_tensors = [self]
+        for t in tensors:
             if isinstance(t, cp.ndarray):
-                data.append(t)
+                all_tensors.append(t)
             else:
-                data.append(t.data)
-        return cp.concatenate(data, axis=ctx.axis)
+                all_tensors.append(t.data)
+
+        return cp.concatenate(all_tensors, axis=dim)
 
     @staticmethod
     def backward(ctx, grad_output: cp.ndarray):
-        grads = cp.split(grad_output, cp.cumsum(ctx.shapes)[:-1], axis=ctx.axis)
+        axis = ctx.axis
+        split_sizes = [shape[axis] for shape in ctx.shapes]
+        split_indices = cp.cumsum(split_sizes)[:-1]
+        grads = cp.split(grad_output, split_indices, axis=axis)
         return tuple(grads)
+
+
+class Squeeze(CudaFunction):
+    @staticmethod
+    def forward(ctx, self: cp.ndarray, dim: int = None):
+        ctx.save_forward_context(self)
+        return cp.squeeze(self, axis=dim)
+
+    @staticmethod
+    def backward(ctx, grad_output: cp.ndarray):
+        (input,) = ctx.forward_context
+        return cp.reshape(grad_output, input.shape)
+
+
+class Unsqueeze(CudaFunction):
+    @staticmethod
+    def forward(ctx, self: cp.ndarray, dim: int):
+        ctx.save_forward_context(self)
+        return cp.expand_dims(self, axis=dim)
+
+    @staticmethod
+    def backward(ctx, grad_output: cp.ndarray):
+        return cp.squeeze(grad_output)
 
 
 class ArgMax(CudaFunction):
@@ -704,6 +799,22 @@ class ArgMax(CudaFunction):
     @staticmethod
     def backward(ctx, grad_output: cp.ndarray):
         raise RuntimeError("ArgMax is not differentiable")
+
+
+class TanH(CudaFunction):
+    @staticmethod
+    def forward(ctx, self: cp.ndarray) -> cp.ndarray:
+        ctx.save_forward_context(self)
+        return cp.tanh(self)
+
+    @staticmethod
+    def backward(ctx, grad_output: cp.ndarray):
+        (input,) = ctx.forward_context
+        return grad_output * (1 - cp.tanh(input) ** 2)
+
+
+def stack(tensors: Tuple[cp.ndarray], dim: int = 0) -> cp.ndarray:
+    return cp.stack(tensors, axis=dim)
 
 
 # Factories
@@ -755,11 +866,21 @@ def attach_op(function: Type[CudaFunction]):
     return partial(function.apply, function)
 
 
+def move_to_backend(tensor: Any) -> BackendTensor:
+    tensor_type = type(tensor).__module__
+
+    if tensor_type == "numpy":
+        return cp.array(tensor)
+
+    raise ValueError(f"Cannot move tensor of type {tensor_type} to the backend")
+
+
 funcs = {
     "init_data": init_data,
     "copy": copy,
     "numpy": numpy,
     "to_dtype": to_dtype,
+    "move_to_backend": move_to_backend,
 }
 
 ops_map = {
@@ -779,12 +900,16 @@ ops_map = {
     "relu": attach_op(ReLU),
     "sigmoid": attach_op(Sigmoid),
     "dropout": attach_op(Dropout),
+    "getitem": attach_op(GetItem),
     "take": attach_op(Take),
     "transpose": attach_op(Transpose),
     "reshape": attach_op(Reshape),
     "flatten": attach_op(Flatten),
     "cat": attach_op(Cat),
     "argmax": attach_op(ArgMax),
+    "tanh": attach_op(TanH),
+    "squeeze": attach_op(Squeeze),
+    "unsqueeze": attach_op(Unsqueeze),
 }
 
 factories = {
@@ -792,4 +917,5 @@ factories = {
     "ones": ones,
     "zeros": zeros,
     "arange": arange,
+    "stack": stack,
 }

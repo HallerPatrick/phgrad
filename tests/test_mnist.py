@@ -31,7 +31,9 @@ class TestMNIST(unittest.TestCase):
             for i in range(0, len(self.X_train), 32):
                 optimizer.zero_grad()
                 x = Tensor(self.X_train[i : i + 32])
-                y = Tensor(np.argmax(self.Y_train[i : i + 32], axis=1), dtype=types.int64)
+                y = Tensor(
+                    np.argmax(self.Y_train[i : i + 32], axis=1), dtype=types.int64
+                )
                 y_pred = mlp(x)
                 y_pred_log_softmax = y_pred.log_softmax(dim=1)
                 loss = nllloss(y_pred_log_softmax, y, reduce="mean")
@@ -88,6 +90,7 @@ class TestMNIST(unittest.TestCase):
         )
         print(f"Accuracy: {accuracy}")
 
+
 @pytest.mark.slow
 @requires_cupy
 class TestMNISTCUDA(unittest.TestCase):
@@ -112,7 +115,11 @@ class TestMNISTCUDA(unittest.TestCase):
             for i in range(0, len(self.X_train), 32):
                 optimizer.zero_grad()
                 x = Tensor(self.X_train[i : i + 32], device="cuda")
-                y = Tensor(np.argmax(self.Y_train[i : i + 32], axis=1), device="cuda", dtype=types.int64)
+                y = Tensor(
+                    np.argmax(self.Y_train[i : i + 32], axis=1),
+                    device="cuda",
+                    dtype=types.int64,
+                )
                 y_pred = mlp(x)
                 y_pred_log_softmax = y_pred.log_softmax(dim=1)
                 y_pred_log_softmax = y_pred.log_softmax(dim=1)
@@ -129,4 +136,3 @@ class TestMNISTCUDA(unittest.TestCase):
             # Stupid test, but good for regression
             self.assertGreater(accuracy, current_accuracy)
             current_accuracy = accuracy
-

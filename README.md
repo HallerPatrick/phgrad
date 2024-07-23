@@ -21,29 +21,36 @@ The [example](./examples) folder will contain some examples of how to use the li
 ### Example
 
 ```python
-
 from phgrad.engine import Tensor
 from phgrad.nn import Linear, Module
 
 # We now have cuda support!
 device = "cuda"
 
-class Classifier(Module):
-    def __init__(self):
-        self.l1 = Linear(784, 64, bias=True, device=device)
-        self.l2 = Linear(64, 2, bias=True, device=device)
+class MLP(Module):
+    """A simple Multi Layer Perceptron."""
 
-    def forward(self, x: Tensor):
-        x = self.l2(self.l1(x).relu())
-        # LogSoftmax is also a custom cuda kernel
-        # 🚀 Wow, blazingly fast!
-        return x.log_softmax(dim=-1)
+    def __init__(
+        self,
+        inp_dim: int,
+        hidden_size: int,
+        output_dim: int,
+        bias: bool = True,
+    ):
+        super().__init__()
+        self.l1 = Linear(inp_dim, hidden_size, bias=bias)
+        self.l2 = Linear(hidden_size, output_dim, bias=bias)
 
-model = Classifier()
+    def forward(self, x: Tensor) -> Tensor:
+        x = self.l1(x)
+        x = x.relu()
+        x = self.l2(x)
+        return x
+
+model = MLP(784, 256, 10).to(device)
 x = Tensor(np.random.randn(32, 784), device=device)
-y = model(x)
+y = model(x).mean()
 y.backward()
-
 ```
 
 

@@ -11,9 +11,7 @@ from phgrad import types
 
 
 class TestModule(unittest.TestCase):
-
     def test_parameters(self):
-
         class SomeModule(Module):
             def __init__(self, bias=False):
                 super().__init__()
@@ -42,9 +40,9 @@ class TestModule(unittest.TestCase):
 @requires_torch
 class TestLinearLayer(unittest.TestCase):
     def test_linear_layer(self):
-
         import torch
         from torch.nn import Linear as TorchLinear
+
         tlinear = TorchLinear(2, 1, bias=False)
 
         result = tlinear(torch.tensor([[1, 2]], dtype=torch.float32))
@@ -64,6 +62,7 @@ class TestLinearLayer(unittest.TestCase):
     def test_linear_layer_bias(self):
         import torch
         from torch.nn import Linear as TorchLinear
+
         tlinear = TorchLinear(2, 1, bias=True)
 
         result = tlinear(torch.tensor([[1, 2]], dtype=torch.float32))
@@ -83,8 +82,8 @@ class TestLinearLayer(unittest.TestCase):
         np.testing.assert_allclose(tlinear.bias.grad, linear.biases.grad)
 
     def test_mlp(self):
-
         import torch
+
         class TorchMLP(torch.nn.Module):
             def __init__(self, *args, **kwargs) -> None:
                 super().__init__(*args, **kwargs)
@@ -136,6 +135,7 @@ class TestLinearLayer(unittest.TestCase):
 
     def test_classifier(self):
         import torch
+
         class TorchClassifier(torch.nn.Module):
             def __init__(self, *args, **kwargs) -> None:
                 super().__init__(*args, **kwargs)
@@ -191,6 +191,7 @@ class TestLinearLayer(unittest.TestCase):
 
     def test_classifier_sparse_input(self):
         import torch
+
         class TorchClassifier(torch.nn.Module):
             def __init__(self, *args, **kwargs) -> None:
                 super().__init__(*args, **kwargs)
@@ -247,8 +248,8 @@ class TestLinearLayer(unittest.TestCase):
                 torch_classifier.l2.weight.detach().numpy(), classifier.l2.weights.data
             )
 
-class TestDropout(unittest.TestCase):
 
+class TestDropout(unittest.TestCase):
     def test_dropout(self):
         dropout = Dropout(0.4)
         for _ in range(10):
@@ -265,7 +266,6 @@ class TestDropout(unittest.TestCase):
 
 
 class TestEmbedding(unittest.TestCase):
-
     def test_embedding(self):
         embedding = Embedding(10, 5)
         for _ in range(10):
@@ -273,4 +273,3 @@ class TestEmbedding(unittest.TestCase):
             t = Tensor(input, dtype=types.int64)
             result = embedding(t)
             self.assertEqual(result.data.shape, (100, 5))
-

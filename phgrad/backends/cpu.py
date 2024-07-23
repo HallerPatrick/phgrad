@@ -539,12 +539,6 @@ class GetItem(CPUFunction):
         grad_input = np.zeros(input_shape, dtype=grad_output.dtype)
 
         # Placing the gradients back in the positions specified by the slice
-        # print(grad_input, indices, grad_output)
-        # print(grad_input.shape, indices, grad_output.shape)
-        print(">>")
-        print(indices)
-        print(grad_input[indices])
-        print(grad_output)
         np.add.at(grad_input, indices, grad_output)
         return grad_input
 
@@ -651,7 +645,6 @@ class Cat(CPUFunction):
         all_tensors = [self, *tensors]
         ctx.shapes = [t.shape for t in all_tensors]
         ctx.axis = dim
-        print([t.shape for t in all_tensors])
         return np.concatenate([t.data for t in all_tensors], axis=ctx.axis)
 
     @staticmethod
@@ -679,6 +672,18 @@ class Squeeze(CPUFunction):
         return np.expand_dims(grad_output, axis=ctx.dim)
 
 
+class Unsqueeze(CPUFunction):
+    @staticmethod
+    def forward(ctx, self: np.ndarray, *, dim: int = 0):
+        ctx.save_forward_context(self)
+        ctx.dim = dim
+        return np.expand_dims(self, axis=dim)
+
+    @staticmethod
+    def backward(ctx, grad_output: np.ndarray):
+        return np.squeeze(grad_output, axis=ctx.dim)
+
+
 class ArgMax(CPUFunction):
     differentiable = False
 
@@ -689,6 +694,112 @@ class ArgMax(CPUFunction):
     @staticmethod
     def backward(ctx, grad_output: np.ndarray):
         raise RuntimeError("ArgMax is not differentiable")
+
+
+class CosineSimilarity(CPUFunction):
+    @staticmethod
+    def forward(
+        ctx, self: np.ndarray, tensor: np.ndarray, *, dim: int = 0
+    ) -> np.ndarray:
+        ctx.save_forward_context(self, tensor)
+        ctx.dim = dim
+
+        # Compute cosine similarity
+        dot_product = np.sum(self * tensor, axis=dim, keepdims=True)
+        norm_a = np.sqrt(np.sum(self**2, axis=dim, keepdims=True))
+        norm_b = np.sqrt(np.sum(tensor**2, axis=dim, keepdims=True))
+        return dot_product / (norm_a * norm_b)
+
+    @staticmethod
+    def backward(ctx, grad_output: np.ndarray):
+        self, tensor = ctx.forward_context
+        # dim = ctx.dim
+        return unbroadcast(grad_output * tensor, self.shape), unbroadcast(
+            grad_output * self, tensor.shape
+        )
+
+
+class _Stack(CPUFunction):
+    @staticmethod
+    def forward(
+        ctx, self: np.ndarray, tensors: Tuple[np.ndarray], *, dim: int = 0
+    ) -> np.ndarray:
+        assert isinstance(tensors, tuple), "Tensors must be a tuple"
+        all_tensors = (self,) + tensors
+        ctx.dim = dim
+        ctx.num_tensors = len(all_tensors)
+        ctx.input_shapes = [t.shape for t in all_tensors]
+        return np.stack(all_tensors, axis=dim)
+
+    @staticmethod
+    def backward(ctx, grad_output: np.ndarray):
+        grads = np.split(grad_output, ctx.num_tensors, axis=ctx.dim)
+
+        # Reshape gradients to match input shapes
+        reshaped_grads = [
+            grad.reshape(shape) for grad, shape in zip(grads, ctx.input_shapes)
+        ]
+
+        # First gradient is for 'self', rest are for 'tensors'
+        grad_self = reshaped_grads[0]
+        grad_tensors = tuple(reshaped_grads[1:])
+
+        return (grad_self, grad_tensors, None)
+
+
+class Stack(CPUFunction):
+    """Stack function.
+
+    Function:
+    f(x1, x2, ..., xn) = stack([x1, x2, ..., xn], axis)
+    where x1, x2, ..., xn are arrays with the same shape.
+
+    Gradient:
+    The gradient with respect to each input is the corresponding slice of the output gradient.
+    """
+
+    @staticmethod
+    def forward(
+        ctx, self: np.ndarray, tensors: List[np.ndarray], dim: int = 0
+    ) -> np.ndarray:
+        """Stack a list of arrays along a new axis."""
+        ctx.save_forward_context(self, *tensors, dim)
+        tensor_data = [t.data for t in tensors]
+        tensor_data.insert(0, self)
+        return np.stack(tensor_data, axis=dim)
+
+    @staticmethod
+    def backward(ctx, grad_output: np.ndarray):
+        tensors, axis = ctx.forward_context[:-1], ctx.forward_context[-1]
+        grads = np.split(grad_output, len(tensors), axis=axis)
+        return tuple(
+            unbroadcast(grad, tensor.shape) for grad, tensor in zip(grads, tensors)
+        )
+
+
+class Scatter(CPUFunction):
+    @staticmethod
+    def forward(
+        ctx, self: np.ndarray, indices: np.ndarray, values: np.ndarray, axis: int = 0
+    ) -> np.ndarray:
+        ctx.save_forward_context(self, indices, values, axis)
+
+        # If indices is -1 match the indices with the shape of self
+        # and put the values along the axis
+        if isinstance(indices, int) and indices == -1:
+            breakpoint()
+            indices = np.indices(self.shape)
+            indices = np.moveaxis(indices, 0, axis)
+            breakpoint()
+
+        breakpoint()
+        np.put_along_axis(self, indices, values, axis)
+        return self
+
+    @staticmethod
+    def backward(ctx, grad_output: np.ndarray):
+        self, indices, values, axis = ctx.forward_context
+        return np.take(grad_output, indices, axis=axis)
 
 
 # Factories
@@ -753,11 +864,21 @@ def scatter_add(
     return np.put_along_axis(tensor, indices, values, axis)
 
 
+def move_to_backend(tensor: Any) -> BackendTensor:
+    tensor_type = type(tensor).__module__
+
+    if tensor_type == "cupy":
+        return tensor.get()
+
+    raise ValueError(f"Cannot move tensor of type {tensor_type} to the backend")
+
+
 funcs = {
     "init_data": init_data,
     "copy": copy,
     "numpy": numpy,
     "scatter_add": scatter_add,
+    "move_to_backend": move_to_backend,
 }
 
 ops_map = {
@@ -786,6 +907,10 @@ ops_map = {
     "cat": attach_op(Cat),
     "argmax": attach_op(ArgMax),
     "squeeze": attach_op(Squeeze),
+    "unsqueeze": attach_op(Unsqueeze),
+    "cosine_similarity": attach_op(CosineSimilarity),
+    "scatter": attach_op(Scatter),
+    # "stack": attach_op(Stack),
 }
 
 factories = {

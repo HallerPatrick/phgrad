@@ -3,6 +3,7 @@ import unittest
 from functools import partial
 
 import numpy as np
+
 try:
     import cupy as cp
     from phgrad.backends.cuda import LogSoftmax, Softmax
@@ -13,11 +14,14 @@ from utils import requires_torch, requires_cupy
 
 from phgrad.engine import Tensor as Tensor
 
+
 def tensor_with_cuda(*args, **kwargs):
     return partial(Tensor, *args, **kwargs, device="cuda")
 
+
 TensorType = Tensor
 Tensor = tensor_with_cuda()
+
 
 @requires_cupy
 class TestReshape(unittest.TestCase):
@@ -75,24 +79,17 @@ class TestOps(unittest.TestCase):
 
         tt1 = torch.tensor([[1, 2, -3]], dtype=torch.float32, requires_grad=True)
         tt2 = torch.nn.functional.softmax(tt1, dim=-1)
-        
-        # t3 = t2.sum()
-        # t3.backward()
-        # tt3 = tt2.mean()
-        # print(tt3)
-        # print(tt3.shape)
-        # tt3.backward()
 
         assert isinstance(t2.data, cp.ndarray)
         assert t2.data.shape == (1, 3)
         assert np.allclose(t2.data, tt2.detach().numpy())
         # assert np.allclose(t1.grad, tt1.grad.detach().numpy())
 
-
     @requires_torch
     @unittest.skip("Not implemented")
     def test_softmax_with_axis(self):
         import torch
+
         t1 = Tensor(np.array([[1, 2, -3], [4, 5, 6]]))
         t2 = t1.softmax()
 
@@ -102,7 +99,6 @@ class TestOps(unittest.TestCase):
         assert isinstance(t2.data, cp.ndarray)
         assert t2.data.shape == (2, 3)
         assert np.allclose(t2.data, tt2.detach().numpy())
-
 
     def test_add_backward(self):
         t1 = Tensor(np.eye(3))
@@ -190,7 +186,7 @@ class TestLogSoftmax(unittest.TestCase):
         """Test the forward pass with a simple input."""
         import torch
 
-        input_np = cp.array([[0.1, 0.2, 0.3], [0.4, 0.5, 0.6]],  dtype=cp.float32)
+        input_np = cp.array([[0.1, 0.2, 0.3], [0.4, 0.5, 0.6]], dtype=cp.float32)
         input_torch = torch.tensor(input_np, dtype=torch.float32, requires_grad=True)
 
         ctx = LogSoftmax()
@@ -206,19 +202,22 @@ class TestLogSoftmax(unittest.TestCase):
             [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]], dtype=torch.float32
         )
         log_softmax_torch.backward(grad_output)
-        grad_np = LogSoftmax.backward(ctx, cp.array(grad_output.numpy(), dtype=cp.float32))
+        grad_np = LogSoftmax.backward(
+            ctx, cp.array(grad_output.numpy(), dtype=cp.float32)
+        )
 
-        np.testing.assert_almost_equal(grad_np.get(), input_torch.grad.numpy(), decimal=3)
+        np.testing.assert_almost_equal(
+            grad_np.get(), input_torch.grad.numpy(), decimal=3
+        )
+
 
 @requires_torch
 @requires_cupy
 class TestSoftmax(unittest.TestCase):
-
     def test_forward_backward(self):
-
         import torch
 
-        input_np = cp.array([[0.1, 0.2, 0.3], [0.4, 0.5, 0.6]],  dtype=cp.float32)
+        input_np = cp.array([[0.1, 0.2, 0.3], [0.4, 0.5, 0.6]], dtype=cp.float32)
         input_torch = torch.tensor(input_np, dtype=torch.float32, requires_grad=True)
 
         ctx = Softmax()
@@ -236,20 +235,30 @@ class TestSoftmax(unittest.TestCase):
         softmax_torch.backward(grad_output)
         # Check for grad
         grad_np = Softmax.backward(ctx, cp.array(grad_output.numpy(), dtype=cp.float32))
-        np.testing.assert_almost_equal(grad_np.get(), input_torch.grad.numpy(), decimal=3)
+        np.testing.assert_almost_equal(
+            grad_np.get(), input_torch.grad.numpy(), decimal=3
+        )
 
 
 @requires_cupy
 class TestCat(unittest.TestCase):
-
     def test_cat(self):
         t1, t2 = Tensor(np.array([0.1, 0.2])), Tensor(np.array([0.3, 0.4]))
-        t3 = t1.cat((t2, ))
-        np.testing.assert_equal(t3.data.get(), cp.array([0.1, 0.2, 0.3, 0.4], dtype=cp.float32).get())
+        t3 = t1.cat((t2,))
+        print(t3.shape)
+        np.testing.assert_equal(
+            t3.data.get(), cp.array([0.1, 0.2, 0.3, 0.4], dtype=cp.float32).get()
+        )
 
     def test_cat_dim1(self):
-        t1, t2 = Tensor(np.array([[0.1, 0.2], [0.3, 0.4]])), Tensor(np.array([[0.5, 0.6], [0.7, 0.8]]))
+        t1, t2 = (
+            Tensor(np.array([[0.1, 0.2], [0.3, 0.4]])),
+            Tensor(np.array([[0.5, 0.6], [0.7, 0.8]])),
+        )
         t3 = t1.cat((t2,), dim=1)
-        np.testing.assert_equal(t3.data.get(), cp.array([[0.1, 0.2, 0.5, 0.6], [0.3, 0.4, 0.7, 0.8]], dtype=cp.float32).get())
-
-
+        np.testing.assert_equal(
+            t3.data.get(),
+            cp.array(
+                [[0.1, 0.2, 0.5, 0.6], [0.3, 0.4, 0.7, 0.8]], dtype=cp.float32
+            ).get(),
+        )

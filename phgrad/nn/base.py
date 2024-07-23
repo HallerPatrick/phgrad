@@ -6,9 +6,8 @@ from phgrad.engine import Tensor
 class Module:
     """Base class for all modules."""
 
-    def __init__(self, device="cpu"):
+    def __init__(self):
         self.training = True
-        self.device = device
 
     def forward(self, *args: Any, **kwargs: Any) -> Any:
         raise NotImplementedError

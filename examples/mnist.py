@@ -2,6 +2,7 @@ import os
 import sys
 import time
 import numpy as np
+from tqdm import tqdm
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -34,7 +35,7 @@ class MNIST:
         # At around 256, the GPU is faster than CPU
         hidden_size = 256
 
-        mlp = MLP(784, hidden_size, 10, bias=True, device=device)
+        mlp = MLP(784, hidden_size, 10, bias=True).to(device)
         optimizer = SGD(mlp.parameters(), lr=0.005)
         # optimizer = Adam(mlp.parameters())
 
@@ -65,8 +66,8 @@ class MNIST:
         print(f"Preprocess Time: {end_time - start_time:.2f} seconds")
 
         start_time = time.time()
-        for epoch in range(10):
-            for batch in dataset_loader:
+        for epoch in range(2):
+            for batch in tqdm(dataset_loader):
                 optimizer.zero_grad()
                 x, y = batch
                 y_pred = mlp(x)

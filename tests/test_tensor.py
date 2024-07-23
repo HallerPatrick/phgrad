@@ -1,6 +1,7 @@
 import unittest
 import numpy as np
 
+import phgrad as ph
 from phgrad.engine import Tensor as Tensor
 
 
@@ -118,7 +119,6 @@ class TestTensor(unittest.TestCase):
         assert t3.shape == (1, 3)
 
     def test_getitem(self):
-
         t1 = Tensor(np.array([[1.0, 2.0, 3.0]]))
         t2 = t1[0]
 
@@ -136,7 +136,6 @@ class TestTensor(unittest.TestCase):
         assert t4.shape == (2,)
 
     def test_getitem_backward(self):
-
         t1 = Tensor(np.array([[1.0, 2.0, 3.0]]))
         t2 = t1[0]
         t3 = t2.sum()
@@ -158,4 +157,41 @@ class TestTensor(unittest.TestCase):
 
         assert np.allclose(t6.grad, np.array([1.0, 1.0]))
 
+    def test_stack(self):
+        t1 = Tensor(np.array([1.0, 2.0, 3.0]))
+        t2 = Tensor(np.array([4.0, 5.0, 6.0]))
+        t3 = ph.stack((t1, t2), dim=0)
+        assert np.allclose(t3.data, np.array([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]))
+        assert t3.shape == (2, 3)
 
+    def test_stack_backward(self):
+        t1 = Tensor(np.array([1.0, 2.0, 3.0]), requires_grad=True)
+        t2 = Tensor(np.array([4.0, 5.0, 6.0]), requires_grad=True)
+        t3 = ph.stack((t1, t2), dim=0)
+        t4 = t3.sum()
+        t4.backward()
+
+        assert np.allclose(t3.data, np.array([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]))
+        assert np.allclose(t1.grad, np.array([1.0, 1.0, 1.0]))
+        assert np.allclose(t2.grad, np.array([1.0, 1.0, 1.0]))
+
+        assert t3.shape == (2, 3)
+
+    def test_squeeze(self):
+        t1 = Tensor(np.array([[1.0, 2.0, 3.0]]))
+        t2 = t1.squeeze(0)
+        assert t2.shape == (3,)
+
+    def test_squeeze_backward(self):
+        t1 = Tensor(np.array([[1.0, 2.0, 3.0]]), requires_grad=True)
+        t2 = t1.squeeze(0)
+        t3 = t2.sum()
+
+        assert t2.shape == (3,)
+        assert t3.data == 6.0
+        assert t3.requires_grad
+        assert t2.requires_grad
+        assert t1.requires_grad
+        assert t1.grad is None
+        assert t2.grad is None
+        assert t3.grad is None

@@ -9,23 +9,25 @@ from .base import Module
 
 
 class Linear(Module):
-    def __init__(self, inp_dim: int, output_dim: int, bias: bool = True, device="cpu"):
-        super().__init__(device=device)
+    def __init__(self, inp_dim: int, output_dim: int, bias: bool = True):
+        super().__init__()
         self.weights = Tensor(
-            he_initialization((output_dim, inp_dim)).astype(np.float32), device=device
+            he_initialization((output_dim, inp_dim)).astype(np.float32)
         )
 
         self.biases: Optional[Tensor] = None
 
         if bias:
-            self.biases = Tensor(
-                he_initialization((output_dim,)).astype(np.float32), device=device
-            )
+            self.biases = Tensor(he_initialization((output_dim,)).astype(np.float32))
 
     def forward(self, t: Tensor) -> Tensor:
         if self.biases is None:
             return t.matmul(self.weights.T)
+
         return t.matmul(self.weights.T) + self.biases
+
+    def __repr__(self) -> str:
+        return f"Linear(in_dim={self.weights.shape[1]}, out_dim={self.weights.shape[0]}, bias={self.biases is not None})"
 
 
 class MLP(Module):
@@ -37,11 +39,10 @@ class MLP(Module):
         hidden_size: int,
         output_dim: int,
         bias: bool = True,
-        device="cpu",
     ):
-        super().__init__(device=device)
-        self.l1 = Linear(inp_dim, hidden_size, bias=bias, device=device)
-        self.l2 = Linear(hidden_size, output_dim, bias=bias, device=device)
+        super().__init__()
+        self.l1 = Linear(inp_dim, hidden_size, bias=bias)
+        self.l2 = Linear(hidden_size, output_dim, bias=bias)
 
     def forward(self, t: Tensor) -> Tensor:
         t = self.l1(t)
@@ -62,12 +63,10 @@ class Dropout(Module):
 
 
 class Embedding(Module):
-    def __init__(self, num_embeddings: int, embedding_dim: int, device="cpu"):
+    def __init__(self, num_embeddings: int, embedding_dim: int):
         super().__init__()
         self.embedding_dim = embedding_dim
-        self.embeddings = Tensor(
-            he_initialization((num_embeddings, embedding_dim)), device=device
-        )
+        self.embeddings = Tensor(he_initialization((num_embeddings, embedding_dim)))
 
     def forward(self, indexes: Tensor) -> Tensor:
         return self.embeddings.take(indexes)
