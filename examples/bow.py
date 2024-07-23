@@ -116,8 +116,12 @@ def main(device):
                 currrent_batch_source = [t.data for t in currrent_batch_source]
                 currrent_batch_target = [t.data for t in currrent_batch_target]
 
-                bow_vec = Tensor(np.concatenate(currrent_batch_source, axis=0), device=device)
-                target = Tensor(np.concatenate(currrent_batch_target, axis=0), device=device)
+                bow_vec = Tensor(
+                    np.concatenate(currrent_batch_source, axis=0), device=device
+                )
+                target = Tensor(
+                    np.concatenate(currrent_batch_target, axis=0), device=device
+                )
                 optimizer.zero_grad()
 
                 logits = model(bow_vec)
@@ -144,7 +148,6 @@ def main(device):
 
                 currrent_batch_source = []
                 currrent_batch_target = []
-
 
     print_summary()
 

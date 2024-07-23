@@ -33,7 +33,6 @@ class RNN(Module):
         super().__init__()
         self.inp_dim = inp_dim
         self.hidden_size = hidden_size
-        self.device = device
         self.cell = RNNCell(inp_dim, hidden_size)
 
     def forward(self, inp: Tensor, hidden_state: Optional[Tensor] = None):
@@ -46,10 +45,10 @@ class RNN(Module):
         """
         batch_size, seq_len, _ = inp.shape
 
-        if hidden_state is None:
-            hidden_state = Tensor.zeros(
-                (batch_size, self.hidden_size), device=self.device
-            )
+        # if hidden_state is None:
+        #     hidden_state = Tensor.zeros(
+        #         (batch_size, self.hidden_size), device=self.device
+        #     )
 
         outputs = []
         for i in range(seq_len):

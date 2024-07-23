@@ -11,8 +11,8 @@ from datasets import load_dataset
 
 from tqdm import tqdm
 
-class LM(nn.Module):
 
+class LM(nn.Module):
     def __init__(self, vocab_size: int, embedding_dim: int, hidden_size: int):
         super().__init__()
         self.embedding = nn.Embedding(vocab_size, embedding_dim)
@@ -26,20 +26,19 @@ class LM(nn.Module):
         return x, hidden_state
 
 
-
 def main():
-    text = "".join(load_dataset('PatrickHaller/hurt')["train"]["text"])
+    text = "".join(load_dataset("PatrickHaller/hurt")["train"]["text"])
     vocab = sorted(set(text))
     char2idx = {u: i for i, u in enumerate(vocab)}
     idx2char = np.array(vocab)
     text_as_int = np.array([char2idx[c] for c in text])
-    
+
     epochs = 1
     seq_length = 50
     model = LM(len(vocab), 256, 256)
     optimizer = SGD(model.parameters(), lr=0.1)
     hidden_state = Tensor(np.zeros((1, 256), dtype=np.float32))
-    
+
     for _ in range(epochs):
         pbar = tqdm(range(0, len(text_as_int) - seq_length, seq_length))
         for i in pbar:
@@ -53,14 +52,14 @@ def main():
             optimizer.step()
             hidden_state = hidden_state.detach()
             pbar.set_description(f"loss: {loss.item():.4f}")
-    
+
     hidden_state = Tensor(np.zeros((1, 256), dtype=np.float32))
     for _ in range(100):
         sequence = torch.tensor([text_as_int[:seq_length]])
         res, hidden_state = model(sequence, hidden_state)
         res = res.log_softmax(dim=1)
         res = res.detach().numpy().squeeze()
-        
+
         print(">?")
         print("".join(idx2char[text_as_int[:seq_length]]))
         print(">1")

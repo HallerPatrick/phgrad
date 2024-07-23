@@ -58,7 +58,7 @@ class MNIST:
                             self.Y_train[i : i + batch_size].astype(np.float32), axis=1
                         ),
                         device=device,
-                        dtype=types.int64
+                        dtype=types.int64,
                     ),
                 )
             )
@@ -102,9 +102,7 @@ class MNIST:
             plt.show()
 
 
-
 if __name__ == "__main__":
-
     args = sys.argv[1:]
     if len(args) == 0:
         print("Usage: python examples/mnist.py <cpu|cuda>")

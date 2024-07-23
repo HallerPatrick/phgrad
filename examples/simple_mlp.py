@@ -11,6 +11,7 @@ from phgrad.nn import Linear, Module
 # We now have cuda support!
 device = "cuda"
 
+
 class MLP(Module):
     """A simple Multi Layer Perceptron."""
 
@@ -30,6 +31,7 @@ class MLP(Module):
         x = x.relu()
         x = self.l2(x)
         return x
+
 
 model = MLP(784, 256, 10).to(device)
 x = Tensor(np.random.randn(32, 784), device=device)
