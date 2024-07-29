@@ -16,6 +16,9 @@ from phgrad.utils import has_cuda_support
 from tests.utils import load_mnist
 from phgrad import types
 
+from app import start_app
+
+
 
 class MNIST:
     def setUp(self) -> None:
@@ -66,7 +69,7 @@ class MNIST:
         print(f"Preprocess Time: {end_time - start_time:.2f} seconds")
 
         start_time = time.time()
-        for epoch in range(2):
+        for epoch in range(1):
             for batch in tqdm(dataset_loader):
                 optimizer.zero_grad()
                 x, y = batch
@@ -93,6 +96,8 @@ class MNIST:
         print_summary()
 
         print(f"Training time: {end_time - start_time:.2f} seconds")
+
+        start_app(mlp, device)
 
         if False:
             import matplotlib.pyplot as plt
