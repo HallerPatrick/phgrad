@@ -28,14 +28,21 @@ from .. import types
 BackendTensor = np.ndarray
 
 
-def init_data(data: Any, type: types.DType) -> BackendTensor:
-    backend_type = to_backend_type(type)
+def init_data(data: Any, dtype: types.DType) -> BackendTensor:
+    backend_type = to_backend_type(dtype)
     if isinstance(data, np.ndarray):
         if data.dtype == backend_type:
             return data
         return data.astype(backend_type)
     try:
         data = np.array(data, dtype=backend_type)
+    except TypeError as error:
+        # Handle GPU torch tensor
+        if hasattr(data, "device") and "cpu" not in str(data.device):
+            data = data.cpu().numpy()
+        else:
+            raise error
+
     except Exception as error:
         raise ValueError(f"Cannot convert {type(data)} to CPU tensor (numpy). {error}")
 
@@ -396,6 +403,26 @@ class Mean(CPUFunction):
             grad = grad_output / np.prod(shape)
             return np.broadcast_to(grad, input_tensor.shape)
 
+        return grad_output * np.ones_like(input_tensor) / len(input_tensor)
+
+class Var(CPUFunction):
+
+    @staticmethod
+    def forward(ctx, self: np.ndarray, *, dim: Optional[int] = None) -> np.ndarray:
+        """Variance of all elements in a tensor."""
+        ctx.save_forward_context(self)
+        ctx.dim = dim
+        return self.var(axis=dim, keepdims=True)
+
+    @staticmethod
+    def backward(ctx, grad_output: np.ndarray):
+        (input_tensor,) = ctx.forward_context
+        dim = ctx.dim
+        if dim is not None:
+            shape = np.array(input_tensor.shape)
+            shape[dim] = 1
+            grad = grad_output / np.prod(shape)
+            return np.broadcast_to(grad, input_tensor.shape)
         return grad_output * np.ones_like(input_tensor) / len(input_tensor)
 
 
@@ -890,6 +917,7 @@ ops_map = {
     "sum": attach_op(Sum),
     "neg": attach_op(Neg),
     "mean": attach_op(Mean),
+    "var": attach_op(Var),
     "max": attach_op(Max),
     "mul": attach_op(Mul),
     "sub": attach_op(Sub),

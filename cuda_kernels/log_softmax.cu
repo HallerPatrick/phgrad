@@ -7,70 +7,90 @@
 
 extern "C" {
 __global__ void log_softmax_forward(float* output, const float* input, int rows, int cols) {
-    // Compute the LogSoftmax along the last dimension (cols)
-    // Each thread handles one element of the output
-    int idx = blockIdx.x * blockDim.x + threadIdx.x;
-    if (idx < rows * cols) {
-        int row = idx / cols;
-        int col = idx % cols;
+    extern __shared__ float shared_data[];
+    
+    int row = blockIdx.x;
+    int tid = threadIdx.x;
+    
+    float thread_max = -FLT_MAX;
+    float thread_sum = 0.0f;
+    
+    // Find max and compute exp sum
+    for (int c = tid; c < cols; c += blockDim.x) {
+        float val = input[row * cols + c];
+        thread_max = fmaxf(thread_max, val);
+    }
+    
+    // Reduce max within block
+    shared_data[tid] = thread_max;
+    __syncthreads();
 
-        // Compute max for numerical stability
-        float max_val = -FLT_MAX;
-        for (int c = 0; c < cols; ++c) {
-            max_val = fmaxf(max_val, input[row * cols + c]);
+    for (int stride = blockDim.x / 2; stride > 0; stride >>= 1) {
+        if (tid < stride) {
+            shared_data[tid] = fmaxf(shared_data[tid], shared_data[tid + stride]);
         }
+        __syncthreads();
+    }
 
-        // Compute sum of exp(shifted_logits)
-        float sum_exp = 0.0f;
-        for (int c = 0; c < cols; ++c) {
-            sum_exp += expf(input[row * cols + c] - max_val);
+    float max_val = shared_data[0];
+    __syncthreads();  // Ensure all threads have the max value
+
+    // Compute sum of exp(x - max)
+    for (int c = tid; c < cols; c += blockDim.x) {
+        thread_sum += expf(input[row * cols + c] - max_val);
+    }
+
+    // Reduce sum within block
+    shared_data[tid] = thread_sum;
+    __syncthreads();
+
+    for (int stride = blockDim.x / 2; stride > 0; stride >>= 1) {
+        if (tid < stride) {
+            shared_data[tid] += shared_data[tid + stride];
         }
-        // sum_exp -> softmax_output
+        __syncthreads();
+    }
 
-        // Compute log softmax
-        output[idx] = input[idx] - max_val - logf(sum_exp);
+    float sum_exp = shared_data[0];
+    float log_sum_exp = logf(sum_exp) + max_val;
+
+    // Normalize with sum
+    for (int c = tid; c < cols; c += blockDim.x) {
+        output[row * cols + c]  = input[row * cols + c] - log_sum_exp;
     }
 }
 
 __global__ void log_softmax_backward(float* grad_input, const float* grad_output, const float* input, int rows, int cols) {
-    int idx = blockIdx.x * blockDim.x + threadIdx.x;
-    if (idx < rows * cols) {
-        int row = idx / cols;
-        // printf("Row %d\n", row);
-        int col = idx % cols;
-        // printf("Col %d\n", col);
-
-        // Compute max and sum for softmax
-        float max_val = -FLT_MAX;
-        float sum_exp = 0.0f;
-        for (int c = 0; c < cols; ++c) {
-            max_val = fmaxf(max_val, input[row * cols + c]);
+    extern __shared__ float shared_data[];
+    
+    int row = blockIdx.x;
+    int tid = threadIdx.x;
+    
+    float thread_sum = 0.0f;
+    
+    // Compute dot product of grad_output and softmax_output
+    for (int c = tid; c < cols; c += blockDim.x) {
+        thread_sum += grad_output[row * cols + c];
+    }
+    
+    // Reduce sum within block
+    shared_data[tid] = thread_sum;
+    __syncthreads();
+    
+    for (int stride = blockDim.x / 2; stride > 0; stride >>= 1) {
+        if (tid < stride) {
+            shared_data[tid] += shared_data[tid + stride];
         }
-        // printf("max_val: %f\n", max_val);
-        for (int c = 0; c < cols; ++c) {
-            sum_exp += expf(input[row * cols + c] - max_val);
-        }
-        // printf("sum_exp: %f\n", sum_exp);
-
-        // Compute softmax output for this element
-        float softmax_output_val = expf(input[idx] - max_val) / sum_exp;
-
-
-        // printf("softmax_output_val: %f\n", softmax_output_val);
-
-        // Compute sum of gradients for the row
-        float grad_sum = 0.0f;
-        for (int c = 0; c < cols; ++c) {
-            grad_sum += grad_output[row * cols + c];
-        }
-        // printf("grad_sum: %f\n", grad_sum);
-
-        // Compute the gradient for each element
-        // Grad output is in our testcase 1.0 or 0.0, and because grad output is always 1.0 (in our testcase) it is becoming 0.0
-        // grad_input[idx] = softmax_output_val * (grad_output[idx] - grad_sum);
-        grad_input[idx] = grad_output[idx] - (softmax_output_val * grad_sum);
-        // printf("grad_output[idx]: %f\n", grad_output[idx]);
-        // printf("grad_input[idx]: %f\n", grad_input[idx]);
+        __syncthreads();
+    }
+    
+    float sum_grad = shared_data[0];
+    
+    // Compute gradient
+    for (int c = tid; c < cols; c += blockDim.x) {
+        int idx = row * cols + c;
+        grad_input[idx] = grad_output[idx] - expf(input[idx]) * sum_grad;
+            
     }
 }
 }

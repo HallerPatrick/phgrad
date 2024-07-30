@@ -2,12 +2,11 @@
 
 This is more or less a copy of the CPU backend but uses cupy instead of numpy.
 """
+
 import time
-from typing import Any, List, Tuple, Optional, Type, Union
-
+from functools import lru_cache, partial
 from pathlib import Path
-
-from functools import partial
+from typing import Any, List, Optional, Tuple, Type, Union, Dict
 
 try:
     import cupy as cp
@@ -16,13 +15,43 @@ except ImportError:
 
 import numpy as np
 
-from .. import debug
-from .. import types
+from .. import debug, types
 
 BackendTensor = cp.ndarray
 
 
-def _load_cuda_kernels(filename: str, *kernels: Tuple[str]) -> Any:
+class CudaKernelCache:
+    """Cache for compiled CUDA kernels.
+
+    For now we would always provide the forward and backward functions.
+    Therefore we can usually only check for the operation itself and just
+    get both kernels.
+    """
+
+    def __init__(self):
+        self.cached_operations: Dict[str, Dict[str, cp.RawKernel]] = {}
+
+    def is_loaded(self, operation: str) -> bool:
+        return operation in self.cached_operations
+
+    def add_kernel(
+        self, operation: str, kernel_name: str, kernel: cp.RawKernel,
+    ):
+        if operation not in self.cached_operations:
+            self.cached_operations[operation] = {}
+        self.cached_operations[operation][kernel_name] = kernel
+
+    def get_kernel(self, operation: str, kernel_name: str) -> cp.RawKernel:
+        return self.cached_operations[operation][kernel_name]
+
+    def __contains__(self, operation: str) -> bool:
+        return operation in self.cached_operations
+
+
+cuda_kernel_cache = CudaKernelCache()
+
+
+def _load_cuda_kernels(filename: str, kernels: List[str]) -> Any:
     """Load one or more CUDA kernels from a file and compile it.
     All cuda kernels reside in the `cuda_kernels` folder at the root of the
     project.
@@ -42,14 +71,17 @@ def _load_cuda_kernels(filename: str, *kernels: Tuple[str]) -> Any:
     cuda_file = (
         Path(__file__).parent.parent.parent / "cuda_kernels" / (filename + ".cu")
     )
+
     if not cuda_file.exists():
         raise FileNotFoundError(f"Could not find CUDA file {cuda_file}")
 
     with open(cuda_file, "r") as f:
         cuda_code = f.read()
 
-    # Compile the CUDA kernels, and return
-    return tuple(cp.RawKernel(cuda_code, kernel) for kernel in kernels)
+    for kernel_name in kernels:
+        cuda_kernel_cache.add_kernel(
+            filename, kernel_name, cp.RawKernel(cuda_code, kernel_name),
+        )
 
 
 def init_data(data: Any, dtype: Type) -> BackendTensor:
@@ -103,6 +135,9 @@ def to_backend_type(frontend_type: types.DType) -> cp.dtype:
 
 class CudaFunction:
     """Our GPU (CUDA) backend. Mostly based on cupy"""
+    
+    kernel_op: Optional[str] = None
+    kernel_names: Optional[List[str]] = None
 
     __slots__ = ("prev", "forward_context")
 
@@ -111,6 +146,10 @@ class CudaFunction:
     def __init__(self, *tensors: Tuple[cp.ndarray]):
         self.prev = tensors
         self.forward_context: List[Tuple[cp.ndarray]] = []
+
+        if self.kernel_op is not None and self.kernel_names is not None:
+            if not cuda_kernel_cache.is_loaded(self.kernel_op):
+                _load_cuda_kernels(self.kernel_op, self.kernel_names)
 
     def save_forward_context(self, *tensors: Tuple[cp.ndarray]):
         return self.forward_context.extend(tensors)
@@ -462,21 +501,17 @@ class Log(CudaFunction):
 
 
 class LogSoftmax(CudaFunction):
-    # def __init__(self, *args, **kwargs):
-    #     super().__init__(*args, **kwargs)
-    #     self.forward_kernel, self.backward_kernel = _load_cuda_kernels(
-    #         "log_softmax", "log_softmax_forward", "log_softmax_backward"
-    #     )
 
-    # # Load the CUDA kernel
-    # with open(os.path.join(os.path.dirname(__file__), 'kernels/log_softmax.cu'), 'r') as f:
-    #     kernel_code = f.read()
-    #     self.forward_kernel = cp.RawKernel(kernel_code, 'log_softmax_forward')
-    #     self.backward_kernel = cp.RawKernel(kernel_code, 'log_softmax_backward')
+    kernel_op = "log_softmax"
+    kernel_names = [
+        "log_softmax_forward",
+        "log_softmax_backward",
+    ]
+
 
     @staticmethod
-    def _forward(ctx, self: cp.ndarray, dim: int = 0) -> cp.ndarray:
-        if dim != -1 and dim != 1:
+    def forward(ctx, self: cp.ndarray, dim: int = 0) -> cp.ndarray:
+        if dim not in [-1, 1]:
             raise NotImplementedError(
                 "Kernel only supports dim=-1 or dim=1 for 2D tensors."
             )
@@ -484,14 +519,19 @@ class LogSoftmax(CudaFunction):
         rows, cols = self.shape
         output = cp.empty_like(self)
         threads_per_block = 256
-        blocks_per_grid = (rows * cols + threads_per_block - 1) // threads_per_block
-        ctx.forward_kernel(
-            (blocks_per_grid,), (threads_per_block,), (output, self, rows, cols)
+        blocks_per_grid = rows
+        shared_mem_size = threads_per_block * 4  # 4 bytes per float
+        cuda_kernel_cache.get_kernel(ctx.kernel_op, "log_softmax_forward")(
+            (blocks_per_grid,),
+            (threads_per_block,),
+            (output, self, rows, cols),
+            shared_mem=shared_mem_size,
         )
+        ctx.softmax_output = output
         return output
 
     @staticmethod
-    def forward(ctx, self: cp.ndarray, dim: int = 0) -> cp.ndarray:
+    def forward_cupy(ctx, self: cp.ndarray, dim: int = 0) -> cp.ndarray:
         """Log softmax of a tensor."""
         ctx.save_forward_context(self)
         ctx.dim = dim
@@ -507,25 +547,23 @@ class LogSoftmax(CudaFunction):
         return log_softmax_output
 
     @staticmethod
-    def _backward(ctx, grad_output: cp.ndarray):
-        # TODO: Maybe we can cache the softmax output and sum from the forward pass
-        input_tensor = ctx.forward_context[0]
-        rows, cols = input_tensor.shape
-        grad_input = cp.empty_like(input_tensor)
-
+    def backward(ctx, grad_output: cp.ndarray):
+        rows, cols = grad_output.shape
+        grad_input = cp.empty_like(grad_output)
         threads_per_block = 256
-        blocks_per_grid = (rows * cols + threads_per_block - 1) // threads_per_block
-
-        ctx.backward_kernel(
+        blocks_per_grid = rows
+        shared_mem_size = threads_per_block * 4  # 4 bytes per float
+        cuda_kernel_cache.get_kernel(ctx.kernel_op, "log_softmax_backward")(
             (blocks_per_grid,),
             (threads_per_block,),
-            (grad_input, grad_output, input_tensor, rows, cols),
+            (grad_input, grad_output, ctx.softmax_output, rows, cols),
+            shared_mem=shared_mem_size,
         )
 
         return grad_input
 
     @staticmethod
-    def backward(ctx, grad_output: cp.ndarray):
+    def backward_cupy(ctx, grad_output: cp.ndarray):
         """Backward pass for log softmax."""
         dim = ctx.dim
 
@@ -542,33 +580,53 @@ class LogSoftmax(CudaFunction):
 
 
 class Softmax(CudaFunction):
-    # def __init__(self, *tensors: Tuple[cp.ndarray]):
-    #     super().__init__(*tensors)
-    #     self.forward_kernel, self.backward_kernel = _load_cuda_kernels(
-    #         "softmax", "softmax_forward", "softmax_backward"
-    #     )
+
+    kernel_op = "softmax"
+    kernel_names = [
+        "softmax_forward",
+        "softmax_backward",
+    ]
 
     @staticmethod
-    def _forward(ctx, self: cp.ndarray, dim: int = 0) -> cp.ndarray:
-        if dim != -1 and dim != 1:
+    def forward(ctx, self: cp.ndarray, dim: int = 0) -> cp.ndarray:
+        if dim not in [-1, 1]:
             raise NotImplementedError(
                 "Kernel only supports dim=-1 or dim=1 for 2D tensors."
             )
 
         ctx.save_forward_context(self)
-        length = self.size
         rows, cols = self.shape
         output = cp.empty_like(self)
         threads_per_block = 256
-        blocks_per_grid = (length + threads_per_block - 1) // threads_per_block
-        ctx.forward_kernel(
-            (blocks_per_grid,), (threads_per_block,), (output, self, rows, cols)
+        blocks_per_grid = rows
+        shared_mem_size = threads_per_block * 4  # 4 bytes per float
+
+        cuda_kernel_cache.get_kernel(ctx.kernel_op, "softmax_forward")(
+            (blocks_per_grid,),
+            (threads_per_block,),
+            (output, self, rows, cols),
+            shared_mem=shared_mem_size,
         )
         ctx.softmax_output = output
         return output
 
     @staticmethod
-    def forward(ctx, self: cp.ndarray, dim: int = 0) -> cp.ndarray:
+    def backward(ctx, grad_output: cp.ndarray):
+        rows, cols = grad_output.shape
+        grad_input = cp.empty_like(grad_output)
+        threads_per_block = 256
+        blocks_per_grid = rows
+        shared_mem_size = threads_per_block * 4  # 4 bytes per float
+        cuda_kernel_cache.get_kernel(ctx.kernel_op, "softmax_backward")(
+            (blocks_per_grid,),
+            (threads_per_block,),
+            (grad_input, grad_output, ctx.softmax_output, rows, cols),
+            shared_mem=shared_mem_size,
+        )
+        return grad_input
+
+    @staticmethod
+    def forward_cupy(ctx, self: cp.ndarray, dim: int = 0) -> cp.ndarray:
         """Softmax of a tensor."""
         ctx.save_forward_context(self)
         ctx.dim = dim
@@ -578,7 +636,7 @@ class Softmax(CudaFunction):
         return output
 
     @staticmethod
-    def backward(ctx, grad_output: cp.ndarray):
+    def backward_cupy(ctx, grad_output: cp.ndarray):
         """Backward pass for softmax"""
         dim = ctx.dim
         softmax_output = ctx.softmax_output
@@ -587,23 +645,6 @@ class Softmax(CudaFunction):
             * softmax_output
             * (1 - softmax_output.sum(axis=dim, keepdims=True))
         )
-
-    @staticmethod
-    def _backward(ctx, grad_output: cp.ndarray):
-        # dim = ctx.dim
-        # exps = ctx.exps
-        # return grad_output * exps * (1 - exps.sum(axis=dim))
-        #
-        rows, cols = grad_output.shape
-        grad_input = cp.empty_like(grad_output)
-        threads_per_block = 256
-        blocks_per_grid = (rows * cols + threads_per_block - 1) // threads_per_block
-        ctx.backward_kernel(
-            (blocks_per_grid,),
-            (threads_per_block,),
-            (grad_input, grad_output, ctx.softmax_output, rows, cols),
-        )
-        return grad_input
 
 
 class ReLU(CudaFunction):
@@ -909,7 +950,7 @@ ops_map = {
     "transpose": attach_op(Transpose),
     "reshape": attach_op(Reshape),
     "flatten": attach_op(Flatten),
-    "cat": attach_op(Cat),
+    # "cat": attach_op(Cat),
     "argmax": attach_op(ArgMax),
     "tanh": attach_op(TanH),
     "squeeze": attach_op(Squeeze),

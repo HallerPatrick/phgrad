@@ -403,3 +403,11 @@ class TestMatMul(unittest.TestCase):
         with self.assertRaises(ValueError):
             ctx = MatMul()
             MatMul.forward(ctx, input, weight)
+
+class TestVar(unittest.TestCase):
+    
+    def test_var_forward(self):
+
+        t = Tensor(np.array([1, 2, 3, 4, 5]))
+        t2 = t.var()
+        assert t2.data == np.array(2.0)

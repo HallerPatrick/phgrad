@@ -207,6 +207,9 @@ class Tensor:
     def softmax(self, dim: Optional[int] = None) -> "Tensor":
         return self.backend.softmax(self, dim=dim)
 
+    def softmax_cuda(self, dim: Optional[int] = None) -> "Tensor":
+        return self.backend.softmax_cuda(self, dim=dim)
+
     def relu(self) -> "Tensor":
         return self.backend.relu(self)
 
@@ -225,6 +228,9 @@ class Tensor:
 
     def max(self) -> "Tensor":
         return self.backend.max(self)
+
+    def var(self, dim: Optional[int] = None) -> "Tensor":
+        return self.backend.var(self, dim=dim)
 
     # Binary ops
     def add(self, other: TensorOrScalar) -> "Tensor":
@@ -355,7 +361,7 @@ class Tensor:
     ):
         backend = backend_from_device(device, Tensor)
         return cls(
-            backend.ones(*shape),
+            backend.ones(shape),
             requires_grad=requires_grad,
             device=device,
             _backend=backend,
@@ -442,5 +448,5 @@ def stack(tensors: Tuple[Tensor], dim: int = 0):
     return tensors[0].backend.stack(tensors[0], tensors[1:], dim=dim)
 
 
-def cat(tensors: Tuple[Tensor], dim: int = 0):
-    return tensors[0].cat((*tensors[1:],), dim=dim)
+# def cat(tensors: Tuple[Tensor], dim: int = 0):
+#     return tensors[0].backend.cat(tensors[0], tensors[1:], dim=dim)

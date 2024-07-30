@@ -23,7 +23,7 @@ class LM(Module):
     def __init__(self, vocab_size: int, embedding_dim: int, hidden_size: int):
         super().__init__()
         self.embedding = Embedding(vocab_size, embedding_dim)
-        self.rnn = RNN(embedding_dim, hidden_size)
+        self.rnn = RNN(embedding_dim, hidden_size)l
         # self.rnn = LSTM(embedding_dim, hidden_size)
         self.decoder = Linear(hidden_size, vocab_size)
 
@@ -75,10 +75,9 @@ def main(device: str):
                 device=device,
             )
             res, hidden_state = model(sequence, hidden_state)
-            res = res.squeeze(0)
             res = res.log_softmax(dim=-1)
             loss = nllloss(
-                res, target_sequence.squeeze(dim=0), reduce="mean"
+                res.squeeze(dim=0), target_sequence.squeeze(dim=0), reduce="mean"
             )
             loss.backward()
             optimizer.step()

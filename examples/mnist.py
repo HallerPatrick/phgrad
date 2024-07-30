@@ -16,8 +16,6 @@ from phgrad.utils import has_cuda_support
 from tests.utils import load_mnist
 from phgrad import types
 
-from app import start_app
-
 
 
 class MNIST:
@@ -36,7 +34,11 @@ class MNIST:
                 device = "cpu"
 
         # At around 256, the GPU is faster than CPU
-        hidden_size = 256
+        # Hidden size 256,    BS: 4: CPU: 22.86,  GPU: 21.86 sec per epoch
+        # Hidden size 1024,   BS: 4: CPU: 108.99, GPU: 21.61 sec per epoch
+        # Hidden size 1024, BS: 256: CPU: 2.61,   GPU: 0.42 sec per epoch
+
+        hidden_size = 1024
 
         mlp = MLP(784, hidden_size, 10, bias=True).to(device)
         optimizer = SGD(mlp.parameters(), lr=0.005)
@@ -48,7 +50,7 @@ class MNIST:
         dataset_loader = []
 
         start_time = time.time()
-        batch_size = 4
+        batch_size = 256
         for i in range(0, len(self.X_train), batch_size):
             dataset_loader.append(
                 (
@@ -77,7 +79,6 @@ class MNIST:
                 y_pred_log_sm = y_pred.log_softmax(dim=1)
                 loss = nllloss(y_pred_log_sm, y, reduce="mean")
                 loss.backward()
-                # Benchmark
                 y_pred.softmax(dim=-1)
                 optimizer.step()
                 losses.append(loss.data)
@@ -93,11 +94,8 @@ class MNIST:
             print(f"Epoch {epoch}: {accuracy:.2f}")
 
         end_time = time.time()
-        print_summary()
 
         print(f"Training time: {end_time - start_time:.2f} seconds")
-
-        start_app(mlp, device)
 
         if False:
             import matplotlib.pyplot as plt

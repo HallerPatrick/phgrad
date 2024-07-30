@@ -1,16 +1,16 @@
 import unittest
-
 from functools import partial
 
 import numpy as np
 
 try:
     import cupy as cp
+
     from phgrad.backends.cuda import LogSoftmax, Softmax
 except ImportError:
     cp = None
 
-from utils import requires_torch, requires_cupy
+from utils import requires_cupy, requires_torch
 
 from phgrad.engine import Tensor as Tensor
 
@@ -19,14 +19,16 @@ def tensor_with_cuda(*args, **kwargs):
     return partial(Tensor, *args, **kwargs, device="cuda")
 
 
+device = "cuda"
+
 TensorType = Tensor
-Tensor = tensor_with_cuda()
+# Tensor = tensor_with_cuda()
 
 
 @requires_cupy
 class TestReshape(unittest.TestCase):
     def test_reshape(self):
-        tensor = Tensor(np.array([1, 2, 3, 4, 5, 6]))
+        tensor = Tensor(np.array([1, 2, 3, 4, 5, 6]), device=device)
         tensor = tensor.reshape((2, 3))
         assert isinstance(tensor, TensorType)
         assert isinstance(tensor.data, cp.ndarray)
@@ -36,8 +38,8 @@ class TestReshape(unittest.TestCase):
 @requires_cupy
 class TestOps(unittest.TestCase):
     def test_add(self):
-        t1 = Tensor(np.eye(3))
-        t2 = Tensor(np.eye(3))
+        t1 = Tensor(np.eye(3), device=device)
+        t2 = Tensor(np.eye(3), device=device)
         t3 = t1 + t2
         t3.sum().backward()
 
@@ -47,8 +49,8 @@ class TestOps(unittest.TestCase):
         # assert np.all(t3.data == np.array([5, 7, 9]))
 
     def test_add_with_broadcasting(self):
-        t1 = Tensor(np.eye(3))
-        t2 = Tensor(np.array([4, 5, 6]))
+        t1 = Tensor(np.eye(3), device=device)
+        t2 = Tensor(np.array([4, 5, 6]), device=device)
         t3 = t1 + t2
         t3.sum().backward()
 
@@ -56,7 +58,7 @@ class TestOps(unittest.TestCase):
         assert t3.data.shape == (3, 3)
 
     def test_relu(self):
-        t1 = Tensor(np.array([1, 2, -3]))
+        t1 = Tensor(np.array([1, 2, -3]), device=device)
         t2 = t1.relu()
 
         assert isinstance(t2.data, cp.ndarray)
@@ -64,7 +66,7 @@ class TestOps(unittest.TestCase):
         assert np.all(t2.data == cp.array([1, 2, 0]))
 
     def test_sigmoid(self):
-        t1 = Tensor(np.array([1, 2, -3]))
+        t1 = Tensor(np.array([1, 2, -3]), device=device)
         t2 = t1.sigmoid()
         assert isinstance(t2.data, cp.ndarray)
         assert t2.data.shape == (3,)
@@ -74,7 +76,7 @@ class TestOps(unittest.TestCase):
     def test_softmax(self):
         import torch
 
-        t1 = Tensor(np.array([[1, 2, -3]]))
+        t1 = Tensor(np.array([[1, 2, -3]]), device=device)
         t2 = t1.softmax(dim=-1)
 
         tt1 = torch.tensor([[1, 2, -3]], dtype=torch.float32, requires_grad=True)
@@ -90,7 +92,7 @@ class TestOps(unittest.TestCase):
     def test_softmax_with_axis(self):
         import torch
 
-        t1 = Tensor(np.array([[1, 2, -3], [4, 5, 6]]))
+        t1 = Tensor(np.array([[1, 2, -3], [4, 5, 6]]), device=device)
         t2 = t1.softmax()
 
         tt1 = torch.tensor([[1, 2, -3], [4, 5, 6]], dtype=torch.float32)
@@ -101,8 +103,8 @@ class TestOps(unittest.TestCase):
         assert np.allclose(t2.data, tt2.detach().numpy())
 
     def test_add_backward(self):
-        t1 = Tensor(np.eye(3))
-        t2 = Tensor(np.eye(3))
+        t1 = Tensor(np.eye(3), device=device)
+        t2 = Tensor(np.eye(3), device=device)
 
         t3 = t1.add(t2).sum()
 
@@ -114,8 +116,8 @@ class TestOps(unittest.TestCase):
         assert np.all(t2.grad == cp.ones((3, 3)))
 
     def test_mul_backward(self):
-        t1 = Tensor(np.eye(3))
-        t2 = Tensor(np.array([[1, 2, 3], [4, 5, 6], [7, 8, 9]]))
+        t1 = Tensor(np.eye(3), device=device)
+        t2 = Tensor(np.array([[1, 2, 3], [4, 5, 6], [7, 8, 9]]), device=device)
 
         t3 = t1.mul(t2).sum()
 
@@ -128,16 +130,16 @@ class TestOps(unittest.TestCase):
         assert np.all(t3.data == cp.array([15]))
 
     def test_sub_backward(self):
-        t1 = Tensor(np.array([1, 2, 3]))
-        t2 = Tensor(np.array([4, 5, 6]))
+        t1 = Tensor(np.array([1, 2, 3]), device=device)
+        t2 = Tensor(np.array([4, 5, 6]), device=device)
         t3 = t1.sub(t2).sum()
         t3.backward()
         assert np.all(t1.grad == cp.array([1, 1, 1]))
         assert np.all(t2.grad == cp.array([-1, -1, -1]))
 
     def test_div_backward(self):
-        t1 = Tensor(np.array([1.0, 2.0, 3.0]))
-        t2 = Tensor(np.array([4.0, 5.0, 6.0]))
+        t1 = Tensor(np.array([1.0, 2.0, 3.0]), device=device)
+        t2 = Tensor(np.array([4.0, 5.0, 6.0]), device=device)
         t3 = t1.div(t2).sum()
         t3.backward()
         assert np.allclose(t1.grad, cp.array([0.25, 0.2, 0.16666667]))
@@ -145,14 +147,14 @@ class TestOps(unittest.TestCase):
 
     @unittest.skip("Not implemented")
     def test_pow_backward(self):
-        t1 = Tensor(np.array([1.0, 2.0, 3.0]))
+        t1 = Tensor(np.array([1.0, 2.0, 3.0]), device=device)
         t2 = t1.pow(2).sum()
         t2.backward()
         assert np.allclose(t1.grad, cp.array([2.0, 4.0, 6.0]))
 
     def test_dot_backward(self):
-        t1 = Tensor(np.eye(3))
-        t2 = Tensor(np.array([[2.0, 0.0, -2.0]]))
+        t1 = Tensor(np.eye(3), device=device)
+        t2 = Tensor(np.array([[2.0, 0.0, -2.0]]), device=device)
         t3 = t2.dot(t1).sum()
         t3.backward()
 
@@ -162,7 +164,7 @@ class TestOps(unittest.TestCase):
         assert np.allclose(t2.grad, cp.eye(1))
 
     def test_transpose(self):
-        t1 = Tensor(np.array([[1.0, 2.0, 3.0]]))
+        t1 = Tensor(np.array([[1.0, 2.0, 3.0]]), device=device)
 
         t2 = t1.transpose((1, 0))
 
@@ -170,8 +172,8 @@ class TestOps(unittest.TestCase):
         assert t2.shape == (3, 1)
 
     def test_dot(self):
-        t1 = Tensor(np.eye(3))
-        t2 = Tensor(np.array([[2.0, 0.0, -2.0]]))
+        t1 = Tensor(np.eye(3), device=device)
+        t2 = Tensor(np.array([[2.0, 0.0, -2.0]]), device=device)
 
         t3 = t2.dot(t1)
 
@@ -198,14 +200,16 @@ class TestLogSoftmax(unittest.TestCase):
             log_softmax_np.get(), log_softmax_torch.detach().numpy(), decimal=3
         )
 
+        # Check gradient against torch implementation
         grad_output = torch.tensor(
             [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]], dtype=torch.float32
         )
+
         log_softmax_torch.backward(grad_output)
+        # Check for grad
         grad_np = LogSoftmax.backward(
             ctx, cp.array(grad_output.numpy(), dtype=cp.float32)
         )
-
         np.testing.assert_almost_equal(
             grad_np.get(), input_torch.grad.numpy(), decimal=3
         )
@@ -244,8 +248,10 @@ class TestSoftmax(unittest.TestCase):
 @requires_cupy
 class TestCat(unittest.TestCase):
     def test_cat(self):
-        t1, t2 = Tensor(np.array([0.1, 0.2])), Tensor(np.array([0.3, 0.4]))
-        t3 = t1.cat((t2,))
+        t1, t2 = Tensor(np.array([0.1, 0.2]), device=device), Tensor(
+            np.array([0.3, 0.4]), device=device
+        )
+        t3 = Tensor.cat((t1, t2))
         print(t3.shape)
         np.testing.assert_equal(
             t3.data.get(), cp.array([0.1, 0.2, 0.3, 0.4], dtype=cp.float32).get()
@@ -253,10 +259,16 @@ class TestCat(unittest.TestCase):
 
     def test_cat_dim1(self):
         t1, t2 = (
-            Tensor(np.array([[0.1, 0.2], [0.3, 0.4]])),
-            Tensor(np.array([[0.5, 0.6], [0.7, 0.8]])),
+            Tensor(np.array([[0.1, 0.2], [0.3, 0.4]]), device=device),
+            Tensor(np.array([[0.5, 0.6], [0.7, 0.8]]), device=device),
         )
-        t3 = t1.cat((t2,), dim=1)
+        t3 = Tensor.cat(
+            (
+                t1,
+                t2,
+            ),
+            dim=1,
+        )
         np.testing.assert_equal(
             t3.data.get(),
             cp.array(
