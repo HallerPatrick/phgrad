@@ -1,10 +1,12 @@
-
 from phgrad import Tensor
 from phgrad import nn
 
 
-class TransformerLayer(nn.Module):
+class MultiHeadAttention:
+    pass
 
+
+class TransformerLayer(nn.Module):
     def __init__(self, d_model, num_heads, d_ff, dropout):
         super().__init__()
         self.self_attention = MultiHeadAttention(d_model, num_heads)
@@ -20,13 +22,16 @@ class TransformerLayer(nn.Module):
 
 
 class Transformer(nn.Module):
-
-    def __init__(self, num_layers: int, d_model: int, num_heads: int, d_ff: int, dropout: float):
+    def __init__(
+        self, num_layers: int, d_model: int, num_heads: int, d_ff: int, dropout: float
+    ):
         super().__init__()
-        self.layers = [TransformerLayer(d_model, num_heads, d_ff, dropout) for _ in range(num_layers)]
+        self.layers = [
+            TransformerLayer(d_model, num_heads, d_ff, dropout)
+            for _ in range(num_layers)
+        ]
 
     def forward(self, x: Tensor) -> Tensor:
         for layer in self.layers:
             x = layer(x)
         return x
-

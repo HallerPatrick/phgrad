@@ -4,7 +4,7 @@ This is more or less a copy of the CPU backend but uses cupy instead of numpy.
 """
 
 import time
-from functools import lru_cache, partial
+from functools import partial
 from pathlib import Path
 from typing import Any, List, Optional, Tuple, Type, Union, Dict
 
@@ -35,7 +35,10 @@ class CudaKernelCache:
         return operation in self.cached_operations
 
     def add_kernel(
-        self, operation: str, kernel_name: str, kernel: cp.RawKernel,
+        self,
+        operation: str,
+        kernel_name: str,
+        kernel: cp.RawKernel,
     ):
         if operation not in self.cached_operations:
             self.cached_operations[operation] = {}
@@ -80,7 +83,9 @@ def _load_cuda_kernels(filename: str, kernels: List[str]) -> Any:
 
     for kernel_name in kernels:
         cuda_kernel_cache.add_kernel(
-            filename, kernel_name, cp.RawKernel(cuda_code, kernel_name),
+            filename,
+            kernel_name,
+            cp.RawKernel(cuda_code, kernel_name),
         )
 
 
@@ -135,7 +140,7 @@ def to_backend_type(frontend_type: types.DType) -> cp.dtype:
 
 class CudaFunction:
     """Our GPU (CUDA) backend. Mostly based on cupy"""
-    
+
     kernel_op: Optional[str] = None
     kernel_names: Optional[List[str]] = None
 
@@ -501,13 +506,11 @@ class Log(CudaFunction):
 
 
 class LogSoftmax(CudaFunction):
-
     kernel_op = "log_softmax"
     kernel_names = [
         "log_softmax_forward",
         "log_softmax_backward",
     ]
-
 
     @staticmethod
     def forward(ctx, self: cp.ndarray, dim: int = 0) -> cp.ndarray:
@@ -580,7 +583,6 @@ class LogSoftmax(CudaFunction):
 
 
 class Softmax(CudaFunction):
-
     kernel_op = "softmax"
     kernel_names = [
         "softmax_forward",

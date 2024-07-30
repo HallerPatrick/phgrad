@@ -1,6 +1,6 @@
-
 from phgrad import Tensor
 from phgrad.nn import Module
+
 
 class LayerNorm(Module):
     def __init__(self, d_model: int, eps=1e-5, elementwise_affine=True):
@@ -8,8 +8,8 @@ class LayerNorm(Module):
         self.eps = eps
         self.elementwise_affine = elementwise_affine
         if self.elementwise_affine:
-            self.gamma = Tensor.ones((d_model, ))
-            self.beta = Tensor.zeros((d_model, ))
+            self.gamma = Tensor.ones((d_model,))
+            self.beta = Tensor.zeros((d_model,))
         else:
             self.gamma = None
             self.beta = None
@@ -19,4 +19,9 @@ class LayerNorm(Module):
         # We dont have keepdims so we need to do this
         mean = mean.unsqueeze(-1)
         std = x.std(dim=-1)
+        std = std.unsqueeze(-1)
+        x = (x - mean) / (std + self.eps)
+        if self.elementwise_affine:
+            x = x * self.gamma + self.beta
 
+        return x

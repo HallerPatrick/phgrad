@@ -248,8 +248,9 @@ class TestSoftmax(unittest.TestCase):
 @requires_cupy
 class TestCat(unittest.TestCase):
     def test_cat(self):
-        t1, t2 = Tensor(np.array([0.1, 0.2]), device=device), Tensor(
-            np.array([0.3, 0.4]), device=device
+        t1, t2 = (
+            Tensor(np.array([0.1, 0.2]), device=device),
+            Tensor(np.array([0.3, 0.4]), device=device),
         )
         t3 = Tensor.cat((t1, t2))
         print(t3.shape)

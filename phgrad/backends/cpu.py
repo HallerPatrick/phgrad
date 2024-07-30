@@ -405,8 +405,8 @@ class Mean(CPUFunction):
 
         return grad_output * np.ones_like(input_tensor) / len(input_tensor)
 
-class Var(CPUFunction):
 
+class Var(CPUFunction):
     @staticmethod
     def forward(ctx, self: np.ndarray, *, dim: Optional[int] = None) -> np.ndarray:
         """Variance of all elements in a tensor."""
