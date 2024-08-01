@@ -5,20 +5,20 @@ import numpy as np
 from phgrad.engine import Tensor
 from phgrad.init import he_initialization
 
-from .base import Module
+from .base import Module, Parameter
 
 
 class Linear(Module):
     def __init__(self, inp_dim: int, output_dim: int, bias: bool = True):
         super().__init__()
-        self.weights = Tensor(
+        self.weights = Parameter(
             he_initialization((output_dim, inp_dim)).astype(np.float32)
         )
 
         self.biases: Optional[Tensor] = None
 
         if bias:
-            self.biases = Tensor(he_initialization((output_dim,)).astype(np.float32))
+            self.biases = Parameter(he_initialization((output_dim,)).astype(np.float32))
 
     def forward(self, t: Tensor) -> Tensor:
         if self.biases is None:
@@ -66,7 +66,7 @@ class Embedding(Module):
     def __init__(self, num_embeddings: int, embedding_dim: int):
         super().__init__()
         self.embedding_dim = embedding_dim
-        self.embeddings = Tensor(he_initialization((num_embeddings, embedding_dim)))
+        self.embeddings = Parameter(he_initialization((num_embeddings, embedding_dim)))
 
     def forward(self, indexes: Tensor) -> Tensor:
         return self.embeddings.take(indexes)

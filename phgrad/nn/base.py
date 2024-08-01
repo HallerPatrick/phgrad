@@ -2,6 +2,8 @@ from typing import Any
 
 from phgrad.engine import Tensor
 
+from .utils import string_format_module_tree
+
 
 class Module:
     """Base class for all modules."""
@@ -26,7 +28,7 @@ class Module:
             if issubclass(type(parameter), Module):
                 yield from parameter.parameters()
 
-            if isinstance(parameter, Tensor):
+            if isinstance(parameter, Parameter):
                 yield parameter
 
     def to(self, device):
@@ -55,3 +57,53 @@ class Module:
     def parameters(self):
         """Return all parameters of the module."""
         return list(self._parameters())
+
+    def _build_module_repr(self):
+        """Build the string representation of all modules and submodules."""
+        module_repr = []
+        for name, module in self.__dict__.items():
+            if isinstance(module, Module):
+                module_repr.append(f"{name}={module}")
+        return ", ".join(module_repr)
+
+    def __repr__(self):
+        return string_format_module_tree(self.__build_module_tree_repr())
+
+    def state_dict(self):
+        """Return the state of the module."""
+        return self.__build_module_tree_state_dict()
+
+    def __build_module_tree_state_dict(self):
+        def _build_module_tree(module: Module, tree: dict):
+            for name, submodule in module.__dict__.items():
+                if isinstance(submodule, Module):
+                    tree[name] = {}
+                    _build_module_tree(submodule, tree[name])
+                elif isinstance(submodule, Parameter):
+                    tree[name] = submodule.data
+
+        tree = {}
+        _build_module_tree(self, tree)
+        return tree
+
+    def __build_module_tree_repr(self):
+        def _build_module_tree(module: Module, tree: dict):
+            for name, submodule in module.__dict__.items():
+                module_string = module.__class__.__name__
+                if isinstance(submodule, Module):
+                    tree[f"{module_string}.{name}"] = {}
+                    _build_module_tree(submodule, tree[f"{module_string}.{name}"])
+                elif isinstance(submodule, Parameter):
+                    tree[f"{module_string}.{name}"] = submodule.data.shape
+
+        tree = {}
+        _build_module_tree(self, tree)
+        return tree
+
+
+class Parameter(Tensor):
+    """A parameter is a tensor that is meant to be learned."""
+
+    def __init__(self, data, requires_grad=True):
+        super().__init__(data)
+        self.requires_grad = requires_grad
